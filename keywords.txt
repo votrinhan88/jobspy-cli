@@ -1,0 +1,23 @@
+Artificial Intelligence
+Machine Learning
+Deep Learning
+Natural Language Processing
+Computer Vision
+Generative AI
+Large Language Model
+
+AI Engineer
+ML Engineer
+DL Engineer
+NLP Engineer
+CV Engineer
+GenAI Engineer
+LLM Engineer
+
+AI Scientist
+ML Scientist
+DL Scientist
+NLP Scientist
+CV Scientist
+GenAI Scientist
+LLM Scientist

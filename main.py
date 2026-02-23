@@ -1,0 +1,239 @@
+import csv
+import os
+
+from geopy.geocoders import Nominatim
+from jobspy import scrape_jobs
+import pandas as pd
+
+
+class JobScraper:
+    BLACKLIST = [
+        "description",
+        "company_logo",
+        "company_url_direct",
+        "company_addresses",
+        "company_description",
+        "skills",
+        "experience_range",
+        "company_rating",
+        "company_reviews_count",
+        "vacancy_count",
+        "work_from_home_type",
+    ]
+    WHITELIST = [
+        "title",
+        "company",
+        "location",
+        "interval",
+        "min_amount",
+        "max_amount",
+        "currency",
+        "is_remote",
+        "date_posted",
+        "job_url",
+    ]
+
+    def __init__(self, verbose: int = 0):
+        self.verbose = verbose
+
+    def __call__(
+        self,
+        save_path: str,
+        job: str|list[str],
+        location: str|list[str],
+        results_wanted: int = 10,
+        site_name: list = ["linkedin", "zip_recruiter", "indeed", "glassdoor", "google"],
+        **kwargs,
+    ) -> pd.DataFrame:
+        """Scrape job postings from multiple job sites for given job titles and locations.
+
+        Args:
+        + `save_path`: Path to save the resulting CSV file.
+        + `job`: Job title(s) to search for.
+        + `location`: Location(s) to search in.
+        + `results_wanted`: Number of job results to fetch per search. Defaults to 10.
+        + `site_name`: List of job sites to scrape from. Defaults to ["linkedin",  "zip_recruiter", \
+            "indeed", "glassdoor", "google"].
+        + **`kwargs`: Additional keyword arguments passed to the `scrape_jobs` (see bottom).
+
+        Returns: pd.DataFrame containing the scraped job postings.
+
+        ---
+        Keyword arguments for `scrape_jobs`:
+        + `distance`: In miles (default: 50).
+        + `job_type`: Options: 'fulltime', 'parttime', 'internship', 'contract'.
+        + `proxies`: Format: ['user:pass@host:port', 'localhost']. Each job board scraper will round \
+            robin through the proxies.
+        + `is_remote`
+        + `easy_apply`: Filters for jobs hosted on the job board site (LinkedIn easy apply filter no \
+            longer works).
+        + `user_agent`: Override the default user agent (may be outdated).
+        + `description_format`: Options: 'markdown', 'html'. Format type of the job descriptions. \
+            Default: markdown.
+        + `offset`: Starts the search from an offset (e.g. 25 will start from the 25th result).
+        + `hours_old`: Filters jobs by the number of hours since posted (ZipRecruiter and Glassdoor \
+            round up to next day).
+        + `verbose`: Options: 0 (errors only), 1 (errors + warnings), 2 (all logs, default).
+        + `linkedin_fetch_description`: Fetches full description and direct job URL for LinkedIn \
+            (increases requests by O(n)).
+        + `linkedin_company_ids`: Searches for LinkedIn jobs with specific company IDs.
+        + `country_indeed`: Filters the country on Indeed & Glassdoor (see below for correct \
+            spelling).
+        + `enforce_annual_salary`: Converts wages to annual salary.
+        + `ca_cert`: Path to CA Certificate file for proxies.
+        """
+        if isinstance(job, str):
+            job = [job]
+        if isinstance(location, str):
+            location = [location]
+        
+        all_jobs = []
+        counter = 1
+        total = len(job) * len(location)
+        for j in job:
+            for l in location:
+                df = scrape_jobs(
+                    site_name=site_name,
+                    search_term=j,
+                    google_search_term=f"{j} {l}",
+                    location=l,
+                    results_wanted=results_wanted,
+                    verbose=self.verbose,
+                    **kwargs,
+                )
+                df = self.clean_job_list(df)
+                all_jobs.append(df)
+
+                if self.verbose >= 1:
+                    print(f"[{counter}/{total}] Found: {len(df)} jobs for '{j}' @ '{l}'")
+                counter += 1
+        
+        df = self.merge(all_jobs)
+        df.to_csv(save_path, index=False, quoting=csv.QUOTE_ALL)
+        return df
+
+    def clean_job_list(self, df: pd.DataFrame) -> pd.DataFrame:
+        # Drop some unnecessary columns
+        df = df.drop(columns=self.BLACKLIST, errors="ignore")
+        # Move the self.whitelisted columns to the front
+        df = df[self.WHITELIST + [col for col in df.columns if col not in self.WHITELIST]]
+        return df
+    
+    def merge(self, all_jobs: list[pd.DataFrame]) -> pd.DataFrame:
+        # Merge duplicate jobs (e.g. from different sites) based on title, company, location, and date posted
+        df = pd.concat(all_jobs, ignore_index=True)
+        prev_len = len(df)
+        df = df.groupby(["title", "company", "location", "date_posted"], as_index=False).first()
+        if self.verbose > 0:
+            print(f"Remove duplicates: {prev_len} --> {len(df)} unique jobs")
+        
+        # Geocode and standardize locations
+        location_map = self.get_location_map(df)
+        df["location"] = df["location"].map(location_map)
+        return df
+    
+    def get_location_map(self, df: pd.DataFrame) -> dict:
+        geolocator = Nominatim(user_agent="jobscrape")
+
+        unique_locations = df["location"].dropna().unique()
+        location_map = {}
+        for loc in unique_locations:
+            if loc == "":
+                location_map[loc] = loc
+                continue
+            try:
+                geocoded = geolocator.geocode(loc)
+                if geocoded and geocoded.address:
+                    parts = [p.strip() for p in geocoded.address.split(",")]
+                    if len(parts) >= 2:
+                        address = f"{parts[0]}, {parts[-1]}"
+                    else:
+                        address = geocoded.address
+                    location_map[loc] = address
+                else:
+                    location_map[loc] = loc
+            except:
+                location_map[loc] = loc
+
+        return location_map
+
+
+if __name__ == "__main__":
+    import argparse
+    import sys
+
+    # fmt: off
+    parser = argparse.ArgumentParser(description="Scrape job postings from multiple job sites.")
+    required_group = parser.add_argument_group('Required arguments')
+    required_group.add_argument("--job", type=str, nargs='+', required=True, help="Job title(s) to search for, or a text file with one job per line.")
+    required_group.add_argument("--location", type=str, nargs='+', required=True, help="Location(s) to search in.")
+    
+    optional_group = parser.add_argument_group('Optional arguments')
+    required_group.add_argument("--save_path", type=str, default="./jobs.csv", required=True, help="Path to save the resulting CSV file.")
+    optional_group.add_argument("--results_wanted", type=int, default=10, help="Number of job results to fetch per (job, location) pair.")
+    optional_group.add_argument("--site_name", type=str, nargs='+', default=["linkedin", "zip_recruiter", "indeed", "glassdoor", "google"], help="List of job sites to scrape from.")
+    optional_group.add_argument("--verbose", type=int, default=1, help="Verbosity level: 0 (errors only), 1 (errors + warnings), 2 (all logs)")
+
+    auxiliary_group = parser.add_argument_group('Auxiliary arguments')
+    auxiliary_group.add_argument("--distance", type=int, default=50, help="Distance in miles (default: 50)")
+    auxiliary_group.add_argument("--job_type", type=str, choices=["fulltime", "parttime", "internship", "contract"], help="Job type")
+    auxiliary_group.add_argument("--proxies", type=str, nargs='+', help="Proxy list, e.g. user:pass@host:port")
+    auxiliary_group.add_argument("--is_remote", action="store_true", help="Filter for remote jobs")
+    auxiliary_group.add_argument("--easy_apply", action="store_true", help="Filter for jobs hosted on the job board site")
+    auxiliary_group.add_argument("--user_agent", type=str, help="Override the default user agent")
+    auxiliary_group.add_argument("--description_format", type=str, choices=["markdown", "html"], default="markdown", help="Format type of the job descriptions")
+    auxiliary_group.add_argument("--offset", type=int, help="Start search from an offset")
+    auxiliary_group.add_argument("--hours_old", type=int, help="Filter jobs by hours since posted")
+    auxiliary_group.add_argument("--linkedin_fetch_description", action="store_true", help="Fetch full description and direct job URL for LinkedIn")
+    auxiliary_group.add_argument("--linkedin_company_ids", type=int, nargs='+', help="LinkedIn company IDs")
+    auxiliary_group.add_argument("--country_indeed", type=str, help="Country filter for Indeed & Glassdoor")
+    auxiliary_group.add_argument("--enforce_annual_salary", action="store_true", help="Convert wages to annual salary")
+    auxiliary_group.add_argument("--ca_cert", type=str, help="Path to CA Certificate file for proxies")
+    # fmt: on
+    
+    # # Print help if no arguments are provided
+    if len(sys.argv) == 0:
+        parser.print_help()
+        sys.exit(0)
+
+    args = parser.parse_args()
+
+    # Support --job as a text file
+    job_arg = args.job
+    if len(job_arg) == 1 and job_arg[0].endswith('.txt'):
+        with open(job_arg[0], 'r', encoding='utf-8') as f:
+            jobs = [line.strip() for line in f if line.strip()]
+        if args.verbose > 0:
+            print(f"Loaded {len(jobs)} keywords from {job_arg[0]}: {jobs}")
+    else:
+        jobs = job_arg
+
+    # Prepare kwargs for JobScraper
+    scraper_kwargs = {
+        "distance": args.distance,
+        "job_type": args.job_type,
+        "proxies": args.proxies,
+        "is_remote": args.is_remote,
+        "easy_apply": args.easy_apply,
+        "user_agent": args.user_agent,
+        "description_format": args.description_format,
+        "offset": args.offset,
+        "hours_old": args.hours_old,
+        "linkedin_fetch_description": args.linkedin_fetch_description,
+        "linkedin_company_ids": args.linkedin_company_ids,
+        "country_indeed": args.country_indeed,
+        "enforce_annual_salary": args.enforce_annual_salary,
+        "ca_cert": args.ca_cert,
+    }
+    # Remove None values
+    scraper_kwargs = {k: v for k, v in scraper_kwargs.items() if v is not None}
+
+    scraper = JobScraper(verbose=args.verbose)
+    scraper(
+        save_path=args.save_path,
+        job=jobs,
+        location=args.location,
+        results_wanted=args.results_wanted,
+        site_name=args.site_name,
+        **scraper_kwargs,
+    )
