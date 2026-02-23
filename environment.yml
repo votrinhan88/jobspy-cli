@@ -1,4 +1,4 @@
-name: jobscrape
+name: jobspy-cli
 dependencies:
   - python=3.12
   - ipykernel

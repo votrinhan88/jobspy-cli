@@ -19,7 +19,7 @@ JobScrape is a Python wrapper for [JobSpy](https://github.com/speedyapply/JobSpy
 
 ```bash
 conda env create -f environment.yml
-conda activate jobscrape
+conda activate jobspy-cli
 ```
 
 ## Usage
