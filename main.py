@@ -128,6 +128,8 @@ class JobScraper:
             print(f"Remove duplicates: {prev_len} --> {len(df)} unique jobs")
         
         # Geocode and standardize locations
+        if self.verbose > 0:
+            print("Geocoding and standardizing locations... Might take a while")
         location_map = self.get_location_map(df)
         df["location"] = df["location"].map(location_map)
         return df
@@ -169,7 +171,7 @@ if __name__ == "__main__":
     required_group.add_argument("--location", type=str, nargs='+', required=True, help="Location(s) to search in.")
     
     optional_group = parser.add_argument_group('Optional arguments')
-    required_group.add_argument("--save_path", type=str, default="./jobs.csv", required=True, help="Path to save the resulting CSV file.")
+    required_group.add_argument("--save_path", type=str, default="./jobs.csv", help="Path to save the resulting CSV file.")
     optional_group.add_argument("--results_wanted", type=int, default=10, help="Number of job results to fetch per (job, location) pair.")
     optional_group.add_argument("--site_name", type=str, nargs='+', default=["linkedin", "zip_recruiter", "indeed", "glassdoor", "google"], help="List of job sites to scrape from.")
     optional_group.add_argument("--verbose", type=int, default=1, help="Verbosity level: 0 (errors only), 1 (errors + warnings), 2 (all logs)")
