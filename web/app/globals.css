@@ -453,6 +453,33 @@ nextjs-portal {
   flex: 1;
 }
 
+.active-tag {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: color-mix(in srgb, #059669 12%, transparent);
+  color: #059669;
+  border: 1px solid color-mix(in srgb, #059669 25%, transparent);
+  flex-shrink: 0;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .active-tag {
+    color: #6ee7b7;
+    background: color-mix(in srgb, #6ee7b7 12%, transparent);
+    border-color: color-mix(in srgb, #6ee7b7 25%, transparent);
+  }
+}
+
+:root[data-theme="dark"] .active-tag {
+  color: #6ee7b7;
+  background: color-mix(in srgb, #6ee7b7 12%, transparent);
+  border-color: color-mix(in srgb, #6ee7b7 25%, transparent);
+}
+
 .profile-actions {
   display: flex;
   align-items: center;

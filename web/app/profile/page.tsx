@@ -21,8 +21,9 @@ export default function ProfilePage() {
   async function load() {
     const res = await fetch("/api/profiles");
     if (!res.ok) return;
-    const data: string[] = await res.json();
-    setProfiles(data);
+    const data: { profiles: string[]; active: string | null } = await res.json();
+    setProfiles(data.profiles);
+    setActive(data.active);
   }
 
   function notify(kind: "success" | "error", msg: string) {
@@ -185,7 +186,10 @@ export default function ProfilePage() {
                     <button type="button" className="btn btn-sm btn-secondary" onClick={cancelEdit}>Cancel</button>
                   </form>
                 ) : (
-                  <span className="profile-name">{name}</span>
+                  <>
+                    <span className="profile-name">{name}</span>
+                    {active === name && <span className="active-tag">Active</span>}
+                  </>
                 )}
 
                 <div className="profile-actions" onClick={(e) => e.stopPropagation()}>

@@ -1,9 +1,9 @@
 import type { NextRequest } from "next/server";
-import { listProfiles, createProfile, isValidProfileName } from "@/lib/profile";
+import { listProfiles, createProfile, isValidProfileName, getActiveProfile } from "@/lib/profile";
 
 export async function GET() {
-  const profiles = await listProfiles();
-  return Response.json(profiles);
+  const [profiles, active] = await Promise.all([listProfiles(), getActiveProfile()]);
+  return Response.json({ profiles, active });
 }
 
 export async function POST(request: NextRequest) {
