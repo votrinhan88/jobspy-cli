@@ -1,87 +1,126 @@
 # jobspy-cli — Handoff Document
 
-**Next session goal:** Refactor `main.py` into modules (`scraper.py`, `geocoder.py`, `main.py` CLI-only), then ship features in priority order.
+**Next session goal:** Build Phase 1 of the web app — lib layer, profile page, and navbar.
 
 ---
 
 ## Repo state
 
 - **Location:** `c:\Users\votrinhan88\Desktop\jobspy-cli`
-- **Branch:** `main` — 6 commits ahead of origin, all local only (not pushed yet)
-- **Stack:** Python 3.12, uv, python-jobspy 1.1.82, geopy, pandas, pytest
+- **Branch:** `main` — 17 commits ahead of origin, all local only
+- **Python stack:** Python 3.12, uv, python-jobspy, geopy, pandas, pytest
+- **Web stack:** Next.js 16, React 19, TypeScript, Tailwind 4, shadcn/ui, pnpm
 
 ---
 
 ## What was done this session
 
-1. Onboarded the project — single-file CLI wrapper around JobSpy
-2. Migrated from conda to uv (`pyproject.toml` + `uv.lock`, `environment.yml` deleted)
-3. Fixed crash when scrapers return empty DataFrames (`clean_job_list`, `merge`)
-4. Disabled Glassdoor from defaults — returns HTTP 400 upstream (speedyapply/JobSpy#270); noted in README
-5. Added geocoding disk cache (`.geocache.json`) and concurrent Nominatim requests with rate limiting
-6. Added skills: `asd-ste100` (always-on), `grill-me`, `test-driven-development` (always-on), `handoff`
-7. Added `.claude/CLAUDE.md` with project context and always-on skill wiring
-8. Added `.claude/PLAN.md` — full feature roadmap with gain/effort table and actionable plans
-9. Added pytest infrastructure (`pyproject.toml` `[tool.pytest.ini_options]`) and 15 baseline tests — all green
+1. Refactored `main.py` into `scraper.py`, `geocoder.py`, `main.py` (CLI only)
+2. Feature 1 — parallel scraping with `ThreadPoolExecutor` and `--workers` flag
+3. Feature 2 — cross-run upsert: preserves `status` and `location` for known `job_url`; field-level merge for job data; append-only fallback when `job_url` absent
+4. Feature 3 — output filtering: `--title_include`, `--title_exclude`, `--exclude_companies` (inline or `.txt` file)
+5. Data model — added `job_id` (kebab slug), `status`, `status_updated_at` columns to scraper output
+6. Grilled and decided the full web app architecture — see `.claude/SPEC.md`
+7. Scaffolded `web/` — Next.js 16, shadcn/ui initialized, `data/` directory created
+8. Installed UI/UX skills: `design`, `design-system`, `brand` under `.claude/skills/`
+9. Updated `PLAN.md` with current feature status and web app build order
+10. Tests: 65 passing
 
 ---
 
-## What's next: refactor first, then features
-
-### Refactor (do this before any feature work)
-
-Split `main.py` (280 lines, single file) into:
+## Architecture
 
 ```
 jobspy-cli/
-├── main.py        # CLI entry point only — argparse + subcommand dispatch
-├── scraper.py     # JobScraper class (__call__, clean_job_list, merge)
-├── geocoder.py    # _load_geocache, _save_geocache, _geocode_one, get_location_map
-└── tests/
-    └── test_scraper.py  # update imports from main → scraper/geocoder
+├── scraper.py          # JobScraper class — scraping, filtering, upsert, metadata
+├── geocoder.py         # Geocoder class — nominatim, disk cache
+├── main.py             # CLI only — argparse, load_txt_arg, main()
+├── tests/
+│   └── test_scraper.py # 65 tests, all green
+├── data/               # gitignored — profile data lives here
+│   └── {profile}/
+│       ├── jobs.csv
+│       ├── scrape_config.json
+│       ├── cv.pdf
+│       └── scrape_status.json
+└── web/                # Next.js app — scaffolded, not yet built
+    ├── app/
+    ├── components/ui/
+    └── lib/
 ```
 
-Steps:
-1. Run `uv run pytest` — confirm 15 green before touching anything
-2. Create `geocoder.py` — move `GEOCACHE_PATH`, `_RATE_LIMIT`, `_MAX_WORKERS`, `_load_geocache`, `_save_geocache`, `_geocode_one`, `get_location_map` out of `JobScraper` into a standalone `Geocoder` class
-3. Create `scraper.py` — move `JobScraper` class, import `Geocoder` from `geocoder`
-4. Slim `main.py` to argparse + `from scraper import JobScraper` + CLI dispatch
-5. Update `tests/test_scraper.py` imports: `from scraper import JobScraper`
-6. Run `uv run pytest` — confirm still 15 green
-7. Commit: `refactor: split main.py into scraper, geocoder, and cli modules`
+---
 
-### Feature priority (from `.claude/PLAN.md`)
+## CSV schema (current)
 
-| Priority | Feature | Plan location |
-|----------|---------|---------------|
-| 1 | Parallel scraping | `.claude/PLAN.md` §1 |
-| 2 | Incremental append + dedup across runs | `.claude/PLAN.md` §2 |
-| 3 | Application tracker | `.claude/PLAN.md` §5 |
-| 4 | Job scoring + sort | `.claude/PLAN.md` §4 |
-| 5 | Cover letter / gap analysis via Claude API | `.claude/PLAN.md` §6 |
+All original jobspy columns plus:
 
-Each plan section is self-contained and actionable. Follow TDD: write failing test first, watch it fail, then implement.
+| Column | Default | Notes |
+|--------|---------|-------|
+| `job_id` | computed | Kebab slug: `{company}-{title}-{8-char-md5}`. 20-char truncation per segment. |
+| `status` | `""` | `shortlisted\|applied\|interview\|offer\|rejected\|skipped\|""` |
+| `status_updated_at` | `""` | ISO 8601. Set by web app on status change. |
+
+---
+
+## What's next: web app Phase 1
+
+Build in this order — each step is a prerequisite for the next.
+
+### 1. Lib layer (`web/lib/`)
+
+- `csv.ts` — read/write `data/{profile}/jobs.csv` as typed `Job[]`
+- `profile.ts` — list profiles, resolve active profile from cookie, create profile directory
+- `config.ts` — read/write `data/{profile}/scrape_config.json`
+- `scrape-status.ts` — read/write `data/{profile}/scrape_status.json`
+
+### 2. API routes (`web/app/api/`)
+
+| Method | Path | Function |
+|--------|------|---------|
+| `GET` | `/api/jobs` | Read jobs.csv |
+| `PATCH` | `/api/jobs/[jobId]` | Update status + status_updated_at |
+| `GET` | `/api/scrape/status` | Read scrape_status.json |
+| `POST` | `/api/scrape/run` | Spawn Python subprocess |
+| `GET/PUT` | `/api/scrape/config` | Read/write scrape_config.json |
+| `GET/POST` | `/api/resume` | Read/upload CV |
+| `GET/POST` | `/api/profiles` | List/create profiles |
+| `POST` | `/api/profiles/switch` | Set active profile cookie |
+
+### 3. Profile page + cookie
+
+- List profiles, create new, switch active (cookie)
+- On first visit with no profiles: prompt to create one
+
+### 4. Navbar + layout
+
+- Links: Scrape / Jobs / Applications / Resume / Profile
+- Active profile name displayed as a chip
 
 ---
 
 ## Key files
 
-- `main.py` — current single-file implementation (all logic here until refactor)
-- `tests/test_scraper.py` — 15 baseline tests, all green
-- `.claude/PLAN.md` — full roadmap with actionable plans per feature
-- `.claude/CLAUDE.md` — always-on skills and project rules
-- `.geocache.json` — gitignored geocoding cache (persists between runs)
-- `keywords.txt` — 21 AI/ML job titles used as `--job` input
+- `.claude/SPEC.md` — full web app architecture, page functions, API routes, data model
+- `.claude/PLAN.md` — feature status and web app build order
+- `scraper.py` — Python engine (JobScraper class)
+- `geocoder.py` — geocoding (Geocoder class)
+- `tests/test_scraper.py` — 65 tests, all green
+- `web/` — Next.js scaffold (empty pages, no routes yet)
+- `data/.gitkeep` — marks the data directory; contents gitignored
 
-## Known issues
+## Skills
 
-- Glassdoor blocked upstream (HTTP 400, speedyapply/JobSpy#270) — commented out of defaults
-- ZipRecruiter returns 403 from this IP (geo-block) — expected, not a code issue
-- `--save_path` is registered under `required_group` instead of `optional_group` in argparse (cosmetic only, has a default)
-- Docstring at `main.py:60` still mentions Glassdoor — stale, fix during refactor
+- `test-driven-development` — always-on for Python; apply to web API routes too
+- `asd-ste100` — always-on for all text output
+- `design` — invoke for visual design decisions in the web app
+- `design-system` — invoke for design tokens and component specs
+- `handoff` — run before ending a session
 
-## Suggested skills
+## Known issues / constraints
 
-- `test-driven-development` — required for every feature and the refactor
-- `asd-ste100` — apply to any new CLI help strings, error messages, docstrings
-- `handoff` — use again if forking a side task (e.g. the Streamlit UI) mid-session
+- Glassdoor blocked upstream (HTTP 400, speedyapply/JobSpy#270)
+- ZipRecruiter returns 403 from this IP — geo-block, not a code issue
+- Concurrent scrape runs against the same profile are not supported
+- Job scoring deferred until semantic CV/JD matching (features 6/9) is done
+- `scrape_status.json` writer not yet added to Python scraper — needed before Scrape page works
