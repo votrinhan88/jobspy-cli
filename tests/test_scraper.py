@@ -6,7 +6,7 @@ import tempfile
 import pandas as pd
 import pytest
 
-from main import JobScraper
+from scraper import JobScraper
 
 
 # ---------------------------------------------------------------------------
