@@ -16,6 +16,14 @@ export default function ProfilePage() {
 
   useEffect(() => {
     load();
+    const pending = sessionStorage.getItem("profile_notif");
+    if (pending) {
+      sessionStorage.removeItem("profile_notif");
+      try {
+        const parsed = JSON.parse(pending);
+        notify(parsed.kind, parsed.msg);
+      } catch {}
+    }
   }, []);
 
   async function load() {
@@ -47,7 +55,7 @@ export default function ProfilePage() {
         return;
       }
       setActive(name);
-      notify("success", `Switched to "${name}"`);
+      sessionStorage.setItem("profile_notif", JSON.stringify({ kind: "success", msg: `Switched to "${name}"` }));
       window.location.reload();
     } finally {
       setSwitching(null);
