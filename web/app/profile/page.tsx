@@ -9,10 +9,13 @@ export default function ProfilePage() {
   const [creating, setCreating] = useState(false);
   const [switching, setSwitching] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [notification, setNotification] = useState<{ kind: "success" | "error"; msg: string } | null>(null);
+  const [notifFading, setNotifFading] = useState(false);
   const notifTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fadeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     load();
@@ -36,8 +39,14 @@ export default function ProfilePage() {
 
   function notify(kind: "success" | "error", msg: string) {
     setNotification({ kind, msg });
+    setNotifFading(false);
     if (notifTimer.current) clearTimeout(notifTimer.current);
-    notifTimer.current = setTimeout(() => setNotification(null), 10000);
+    if (fadeTimer.current) clearTimeout(fadeTimer.current);
+    // start fade 1s before removal
+    notifTimer.current = setTimeout(() => {
+      setNotifFading(true);
+      fadeTimer.current = setTimeout(() => setNotification(null), 1000);
+    }, 9000);
   }
 
   async function handleSwitch(name: string) {
@@ -78,24 +87,40 @@ export default function ProfilePage() {
       }
       setProfiles((prev) => [...prev, data.name].sort());
       setNewName("");
-      notify("success", `Profile "${data.name}" created`);
+      // auto-switch to the newly created profile
+      await fetch("/api/profiles/switch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: data.name }),
+      });
+      sessionStorage.setItem("profile_notif", JSON.stringify({ kind: "success", msg: `Profile "${data.name}" created and activated` }));
+      window.location.reload();
     } finally {
       setCreating(false);
     }
   }
 
   async function handleDelete(name: string) {
-    if (!confirm(`Delete profile "${name}"? This removes all jobs and config for this profile.`)) return;
     setDeleting(name);
+    setConfirmDelete(null);
     try {
       const res = await fetch(`/api/profiles/${encodeURIComponent(name)}`, { method: "DELETE" });
+      const data = await res.json();
       if (!res.ok) {
-        const data = await res.json();
         notify("error", data.error ?? "Failed to delete profile");
         return;
       }
-      setProfiles((prev) => prev.filter((p) => p !== name));
-      notify("success", `Deleted "${name}"`);
+      const wasActive = active === name;
+      if (wasActive) {
+        const msg = data.newActive
+          ? `Deleted "${name}", switched to "${data.newActive}"`
+          : `Deleted "${name}"`;
+        sessionStorage.setItem("profile_notif", JSON.stringify({ kind: "success", msg }));
+        window.location.reload();
+      } else {
+        setProfiles((prev) => prev.filter((p) => p !== name));
+        notify("success", `Deleted "${name}"`);
+      }
     } finally {
       setDeleting(null);
     }
@@ -157,12 +182,6 @@ export default function ProfilePage() {
       </form>
       <p className="hint">Letters, digits, hyphens, underscores only.</p>
 
-      {notification && (
-        <div className={`toast toast--${notification.kind}`}>
-          {notification.msg}
-        </div>
-      )}
-
       {profiles.length > 0 && (
         <section className="section" style={{ marginTop: "32px" }}>
           <h2 className="section-title">Your profiles</h2>
@@ -200,23 +219,44 @@ export default function ProfilePage() {
 
                 <div className="profile-actions" onClick={(e) => e.stopPropagation()}>
                   {switching === name && <span className="profile-switching-label">Switching…</span>}
-                  <button
-                    className="icon-btn"
-                    title="Rename"
-                    onClick={() => startEdit(name)}
-                    aria-label="Rename profile"
-                  >
-                    <PencilIcon />
-                  </button>
-                  <button
-                    className="icon-btn icon-btn--danger"
-                    title="Delete"
-                    onClick={() => handleDelete(name)}
-                    disabled={deleting === name}
-                    aria-label="Delete profile"
-                  >
-                    <TrashIcon />
-                  </button>
+                  {confirmDelete === name ? (
+                    <>
+                      <span className="delete-confirm-label">Delete?</span>
+                      <button
+                        className="btn btn-sm btn-danger"
+                        onClick={() => handleDelete(name)}
+                        disabled={deleting === name}
+                      >
+                        Yes
+                      </button>
+                      <button
+                        className="btn btn-sm btn-secondary"
+                        onClick={() => setConfirmDelete(null)}
+                      >
+                        Cancel
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        className="icon-btn"
+                        title="Rename"
+                        onClick={() => startEdit(name)}
+                        aria-label="Rename profile"
+                      >
+                        <PencilIcon />
+                      </button>
+                      <button
+                        className="icon-btn icon-btn--danger"
+                        title="Delete"
+                        onClick={() => setConfirmDelete(name)}
+                        disabled={deleting === name}
+                        aria-label="Delete profile"
+                      >
+                        <TrashIcon />
+                      </button>
+                    </>
+                  )}
                 </div>
               </li>
             ))}
@@ -226,6 +266,12 @@ export default function ProfilePage() {
 
       {profiles.length === 0 && (
         <p className="empty-state" style={{ marginTop: "24px" }}>No profiles yet. Create one above.</p>
+      )}
+
+      {notification && (
+        <div className={`toast toast--${notification.kind}${notifFading ? " toast--fading" : ""}`}>
+          {notification.msg}
+        </div>
       )}
     </div>
   );

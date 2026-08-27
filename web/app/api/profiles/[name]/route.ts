@@ -1,6 +1,9 @@
 import fs from "fs/promises";
 import type { NextRequest } from "next/server";
-import { listProfiles, profileDir } from "@/lib/profile";
+import { cookies } from "next/headers";
+import { listProfiles, profileDir, getActiveProfile } from "@/lib/profile";
+
+const PROFILE_COOKIE = "active_profile";
 
 export async function DELETE(
   _request: NextRequest,
@@ -11,6 +14,21 @@ export async function DELETE(
   if (!profiles.includes(name)) {
     return Response.json({ error: "Profile not found" }, { status: 404 });
   }
+
+  const active = await getActiveProfile();
   await fs.rm(profileDir(name), { recursive: true, force: true });
-  return Response.json({ name });
+
+  let newActive: string | null = active;
+  if (active === name) {
+    const remaining = profiles.filter((p) => p !== name);
+    newActive = remaining[0] ?? null;
+    const cookieStore = await cookies();
+    if (newActive) {
+      cookieStore.set(PROFILE_COOKIE, newActive, { httpOnly: true, path: "/" });
+    } else {
+      cookieStore.delete(PROFILE_COOKIE);
+    }
+  }
+
+  return Response.json({ name, newActive });
 }

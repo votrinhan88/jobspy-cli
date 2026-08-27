@@ -28,6 +28,7 @@ export function Nav({ activeProfile }: NavProps) {
       <ul className="sidebar-nav">
         {NAV_ITEMS.map(({ label, href }) => {
           const isActive = pathname === href || pathname.startsWith(href + "/");
+          const isProfile = href === "/profile";
           return (
             <li key={href}>
               <Link
@@ -35,21 +36,18 @@ export function Nav({ activeProfile }: NavProps) {
                 className={`sidebar-link${isActive ? " sidebar-link--active" : ""}`}
               >
                 {label}
+                {isProfile && (
+                  activeProfile ? (
+                    <span className="profile-chip">{activeProfile}</span>
+                  ) : (
+                    <span className="profile-chip profile-chip--none">none</span>
+                  )
+                )}
               </Link>
             </li>
           );
         })}
       </ul>
-
-      <div className="sidebar-footer">
-        {activeProfile ? (
-          <span className="profile-chip">{activeProfile}</span>
-        ) : (
-          <Link href="/profile" className="profile-chip profile-chip--none">
-            No profile
-          </Link>
-        )}
-      </div>
     </nav>
   );
 }

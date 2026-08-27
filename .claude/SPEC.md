@@ -1,7 +1,7 @@
 # jobspy-cli — Web App Specification
 
 **Status:** Living document. Update this file when a decision changes.
-**Last updated:** 2026-08-27
+**Last updated:** 2026-08-27 (session 2)
 
 ---
 
@@ -166,8 +166,12 @@ Written by the Python subprocess. Read by the web app via polling.
 **Function:** Create and switch profiles.
 
 - List all profiles (directories under `data/`).
-- Create a new profile (creates the directory and an empty `scrape_config.json`).
-- Switch active profile (updates session cookie).
+- Create a new profile (creates directory + default `scrape_config.json`), then **immediately auto-switches** to it and reloads.
+- Switch active profile by clicking the row (no separate button).
+- Rename via pencil icon — implemented as create-new + delete-old (no filesystem rename API needed).
+- Delete via trash icon — shows an **inline confirmation** (no `window.confirm`): clicking trash reveals "Delete? / Yes / Cancel" in the row. On confirm, if the deleted profile was active, the server auto-switches to the next alphabetical profile or clears the cookie if none remain, and the client reloads.
+- Active profile is highlighted with an "Active" tag.
+- Active profile name is shown as a chip inline on the "Profile" nav row (right-aligned, pushed with `margin-left: auto`).
 
 ---
 
@@ -183,9 +187,10 @@ Written by the Python subprocess. Read by the web app via polling.
 | `PUT` | `/api/scrape/config` | Write `scrape_config.json` |
 | `GET` | `/api/resume` | Read CV file metadata |
 | `POST` | `/api/resume` | Upload and save CV file |
-| `GET` | `/api/profiles` | List all profile directories |
+| `GET` | `/api/profiles` | List all profile directories; returns `{ profiles, active }` |
 | `POST` | `/api/profiles` | Create a new profile |
 | `POST` | `/api/profiles/switch` | Set active profile cookie |
+| `DELETE` | `/api/profiles/[name]` | Delete profile directory; if it was active, auto-switches to next profile or clears cookie; returns `{ name, newActive }` |
 
 ---
 
@@ -198,6 +203,18 @@ Written by the Python subprocess. Read by the web app via polling.
 5. On `done`: frontend shows diff summary. Polling stops.
 
 Concurrent runs against the same profile are blocked — "Run scrape" button is disabled while `scrape_status.json` reports `running`.
+
+---
+
+## UI Conventions
+
+**Toast** — fixed pill, bottom-center, floats above layout. Spring in, fade+sink out over 1 s after 9 s. Persisted across reload via `sessionStorage` key `profile_notif`.
+
+**Dialogs** — no `window.confirm`. Destructive actions use inline confirmation in the same row: click → "Label? / Yes / Cancel".
+
+**Sidebar** — 180 px, sentence case. Nav order: Profile, Resume, Scrape, Jobs, Applications, Statistics. Active profile chip inline on the Profile row (right-aligned); no footer chip.
+
+**Scrape config** — multi-line fields are `<textarea>` (10 rows, no resize). Auto-saved debounced 600 ms; flushed immediately on blur. Glassdoor shown but blocked with a tooltip badge.
 
 ---
 

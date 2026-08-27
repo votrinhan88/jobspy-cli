@@ -143,7 +143,7 @@
   --app-success-text: #166534;
   --app-error-bg: #fef2f2;
   --app-error-text: #991b1b;
-  --app-sidebar-w: 220px;
+  --app-sidebar-w: 180px;
   --app-font: "Inter", system-ui, sans-serif;
   --app-mono: "JetBrains Mono", "Fira Mono", monospace;
 }
@@ -249,7 +249,7 @@ nextjs-portal {
 }
 
 .sidebar-brand {
-  padding: 20px 20px 16px;
+  padding: 16px 16px 12px;
   border-bottom: 1px solid var(--app-border);
 }
 
@@ -269,8 +269,10 @@ nextjs-portal {
 }
 
 .sidebar-link {
-  display: block;
-  padding: 8px 20px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 16px;
   font-size: 14px;
   font-weight: 500;
   color: var(--app-ink-muted);
@@ -289,30 +291,26 @@ nextjs-portal {
   background: color-mix(in srgb, var(--app-accent) 8%, transparent);
 }
 
-.sidebar-footer {
-  padding: 16px 20px;
-  border-top: 1px solid var(--app-border);
-}
-
 .profile-chip {
-  display: inline-block;
   font-family: var(--app-mono);
-  font-size: 12px;
-  padding: 3px 8px;
+  font-size: 11px;
+  padding: 2px 6px;
   background: var(--app-surface);
   border: 1px solid var(--app-border);
   border-radius: 4px;
-  color: var(--app-ink);
-  text-decoration: none;
+  color: var(--app-ink-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 100%;
+  max-width: 100px;
+  margin-left: auto;
+  flex-shrink: 0;
 }
 
 .profile-chip--none {
   color: var(--app-ink-muted);
   border-style: dashed;
+  opacity: 0.6;
 }
 
 /* ── Page layout ────────────────────────────────────────────────────────── */
@@ -387,18 +385,24 @@ nextjs-portal {
 }
 
 .toast {
-  display: inline-block;
-  margin-top: 16px;
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%) translateY(0);
+  z-index: 9999;
   font-size: 13px;
-  padding: 8px 14px;
-  border-radius: 6px;
+  padding: 9px 18px;
+  border-radius: 20px;
   border: 1px solid transparent;
-  animation: toast-in 0.18s ease;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+  white-space: nowrap;
+  pointer-events: none;
+  animation: toast-in 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 @keyframes toast-in {
-  from { opacity: 0; transform: translateY(4px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translateX(-50%) translateY(10px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
 
 .toast--success {
@@ -411,6 +415,15 @@ nextjs-portal {
   background: var(--app-error-bg);
   color: var(--app-error-text);
   border-color: color-mix(in srgb, var(--app-error-text) 20%, transparent);
+}
+
+.toast--fading {
+  animation: toast-fade 1s ease forwards;
+}
+
+@keyframes toast-fade {
+  from { opacity: 1; transform: translateX(-50%) translateY(0); }
+  to   { opacity: 0; transform: translateX(-50%) translateY(4px); }
 }
 
 /* ── Profile list ───────────────────────────────────────────────────────── */
@@ -617,6 +630,23 @@ nextjs-portal {
 .btn-secondary:hover:not(:disabled) {
   background: var(--app-surface);
   border-color: var(--app-ink-muted);
+}
+
+.btn-danger {
+  background: var(--app-error-bg);
+  color: var(--app-error-text);
+  border-color: color-mix(in srgb, var(--app-error-text) 30%, transparent);
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--app-error-text) 20%, transparent);
+}
+
+.delete-confirm-label {
+  font-size: 12px;
+  color: var(--app-error-text);
+  font-weight: 500;
+  white-space: nowrap;
 }
 
 /* ── Empty state ────────────────────────────────────────────────────────── */
