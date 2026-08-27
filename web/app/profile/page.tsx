@@ -29,7 +29,7 @@ export default function ProfilePage() {
   function notify(kind: "success" | "error", msg: string) {
     setNotification({ kind, msg });
     if (notifTimer.current) clearTimeout(notifTimer.current);
-    notifTimer.current = setTimeout(() => setNotification(null), 4000);
+    notifTimer.current = setTimeout(() => setNotification(null), 10000);
   }
 
   async function handleSwitch(name: string) {
@@ -132,30 +132,28 @@ export default function ProfilePage() {
         </p>
       </header>
 
-      {/* Create form + notification on the same row */}
-      <div className="profile-create-row">
-        <form onSubmit={handleCreate} className="create-form">
-          <input
-            className="input"
-            type="text"
-            placeholder="e.g. ai-engineer-au"
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            required
-            pattern="[a-zA-Z0-9_-]{1,64}"
-            title="Letters, digits, hyphens, underscores. Max 64 characters."
-          />
-          <button className="btn btn-primary" type="submit" disabled={creating}>
-            {creating ? "Creating..." : "Create"}
-          </button>
-        </form>
-        {notification && (
-          <span className={`inline-notif inline-notif--${notification.kind}`}>
-            {notification.msg}
-          </span>
-        )}
-      </div>
+      <form onSubmit={handleCreate} className="create-form">
+        <input
+          className="input"
+          type="text"
+          placeholder="e.g. ai-engineer-au"
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+          required
+          pattern="[a-zA-Z0-9_-]{1,64}"
+          title="Letters, digits, hyphens, underscores. Max 64 characters."
+        />
+        <button className="btn btn-primary" type="submit" disabled={creating}>
+          {creating ? "Creating..." : "Create"}
+        </button>
+      </form>
       <p className="hint">Letters, digits, hyphens, underscores only.</p>
+
+      {notification && (
+        <div className={`toast toast--${notification.kind}`}>
+          {notification.msg}
+        </div>
+      )}
 
       {profiles.length > 0 && (
         <section className="section" style={{ marginTop: "32px" }}>

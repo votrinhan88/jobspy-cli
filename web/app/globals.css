@@ -349,10 +349,8 @@ nextjs-portal {
 }
 
 .section-title {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
   color: var(--app-ink-muted);
   margin: 0 0 12px;
 }
@@ -388,20 +386,33 @@ nextjs-portal {
   flex-wrap: wrap;
 }
 
-.inline-notif {
+.toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
   font-size: 13px;
-  padding: 4px 10px;
-  border-radius: 5px;
+  padding: 10px 18px;
+  border-radius: 8px;
   border: 1px solid transparent;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+  white-space: nowrap;
+  z-index: 999;
+  animation: toast-in 0.18s ease;
 }
 
-.inline-notif--success {
+@keyframes toast-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(8px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+.toast--success {
   background: var(--app-success-bg);
   color: var(--app-success-text);
   border-color: color-mix(in srgb, var(--app-success-text) 20%, transparent);
 }
 
-.inline-notif--error {
+.toast--error {
   background: var(--app-error-bg);
   color: var(--app-error-text);
   border-color: color-mix(in srgb, var(--app-error-text) 20%, transparent);
@@ -454,10 +465,8 @@ nextjs-portal {
 }
 
 .active-tag {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
   padding: 2px 7px;
   border-radius: 4px;
   background: color-mix(in srgb, #059669 12%, transparent);
@@ -725,10 +734,8 @@ nextjs-portal {
 .jobs-table th {
   padding: 10px 14px;
   text-align: left;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
   color: var(--app-ink-muted);
   border-bottom: 1px solid var(--app-border);
   white-space: nowrap;
@@ -933,10 +940,8 @@ nextjs-portal {
 }
 
 .form-label {
-  font-size: 12px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  font-size: 13px;
+  font-weight: 500;
   color: var(--app-ink-muted);
 }
 
