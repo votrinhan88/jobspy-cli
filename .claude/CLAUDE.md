@@ -1,6 +1,6 @@
 # jobspy-cli
 
-A Python CLI wrapper around [JobSpy](https://github.com/speedyapply/JobSpy) that scrapes job postings from LinkedIn, Indeed, ZipRecruiter, Glassdoor, and Google Jobs, merges results, deduplicates, and geocodes locations into a single CSV.
+A Python CLI wrapper around [JobSpy](https://github.com/speedyapply/JobSpy) that scrapes job postings from LinkedIn, Indeed, ZipRecruiter, and Google Jobs, merges results, deduplicates, geocodes locations, and saves to a single CSV. Glassdoor is disabled upstream (speedyapply/JobSpy#270).
 
 ## Always-on Skills
 
@@ -18,11 +18,13 @@ Always follow the instructions in `.claude/skills/test-driven-development/skill.
 
 - Python 3.12, managed with `uv`
 - Key deps: `python-jobspy`, `geopy`, `pandas`
-- Entry point: `main.py` (`JobScraper` class + argparse CLI)
+- Dev deps: `pytest`, `pytest-mock`
+- Entry point: `main.py` (`JobScraper` class + argparse CLI); pending refactor into `scraper.py`, `geocoder.py`, `main.py`
 
 ## Available Commands
 
 - `uv run python ./main.py --help` — show all CLI arguments
+- `uv run pytest` — run test suite
 - `uv sync` — install/update dependencies
 
 ## Git Workflow

@@ -7,8 +7,9 @@ JobScrape is a Python wrapper for [JobSpy](https://github.com/speedyapply/JobSpy
 ## Features
 - Scrapes job postings using [JobSpy](https://github.com/speedyapply/JobSpy)
 - Supports multiple job titles and locations, merging results into a single CSV
-- Post-processing: blacklist column removal, whitelist column ordering, location tidying
-- Batch workloads can be run directly from the CLI
+- Post-processing: column filtering, whitelist ordering, deduplication across sites
+- Geocoding with disk cache — standardizes raw location strings, fast on repeat runs
+- Batch workloads via CLI, including loading job titles from a `.txt` file
 
 ## Project Structure
 - [`pyproject.toml`](pyproject.toml:1): Project metadata and dependencies (managed with [uv](https://docs.astral.sh/uv/))
