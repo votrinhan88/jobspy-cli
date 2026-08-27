@@ -18,6 +18,9 @@ def build_parser() -> argparse.ArgumentParser:
     optional_group.add_argument("--verbose", type=int, default=1, help="Verbosity level: 0 (errors only), 1 (errors + warnings), 2 (all logs)")
     optional_group.add_argument("--workers", type=int, default=4, help="Number of parallel scraping workers (default: 4)")
     optional_group.add_argument("--overwrite", action="store_true", help="Overwrite existing CSV instead of appending")
+    optional_group.add_argument("--title_include", type=str, nargs='+', help="Keep only jobs whose title contains any of these terms (case-insensitive)")
+    optional_group.add_argument("--title_exclude", type=str, nargs='+', help="Drop jobs whose title contains any of these terms (case-insensitive)")
+    optional_group.add_argument("--exclude_companies", type=str, nargs='+', help="Drop jobs from these companies (exact match, case-insensitive), or a .txt file with one company per line")
 
     auxiliary_group = parser.add_argument_group('Auxiliary arguments')
     auxiliary_group.add_argument("--distance", type=int, default=50, help="Distance in miles (default: 50)")
@@ -36,6 +39,13 @@ def build_parser() -> argparse.ArgumentParser:
     auxiliary_group.add_argument("--ca_cert", type=str, help="Path to CA Certificate file for proxies")
     # fmt: on
     return parser
+
+
+def load_txt_arg(values: list[str] | None) -> list[str] | None:
+    if values and len(values) == 1 and values[0].endswith('.txt'):
+        with open(values[0], 'r', encoding='utf-8') as f:
+            return [line.strip() for line in f if line.strip()]
+    return values
 
 
 def main() -> None:
@@ -83,6 +93,9 @@ def main() -> None:
         site_name=args.site_name,
         workers=args.workers,
         overwrite=args.overwrite,
+        title_include=args.title_include,
+        title_exclude=args.title_exclude,
+        exclude_companies=load_txt_arg(args.exclude_companies),
         **scraper_kwargs,
     )
 

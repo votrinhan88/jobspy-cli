@@ -334,3 +334,132 @@ class TestUpsertCliArgs:
         parser = build_parser()
         args = parser.parse_args(["--job", "AI Engineer", "--location", "Australia"])
         assert args.overwrite is False
+
+
+# ---------------------------------------------------------------------------
+# Output filtering
+# ---------------------------------------------------------------------------
+
+def make_multi_df() -> pd.DataFrame:
+    return pd.DataFrame({
+        "title": ["AI Engineer", "Senior ML Engineer", "Data Analyst"],
+        "company": ["Acme", "Beta", "Gamma"],
+        "location": ["Sydney, Australia", "Melbourne, Australia", "Brisbane, Australia"],
+        "date_posted": ["2026-08-27", "2026-08-27", "2026-08-27"],
+        "job_url": ["https://example.com/1", "https://example.com/2", "https://example.com/3"],
+        "min_amount": [100000, 150000, 70000],
+        "max_amount": [130000, 200000, 90000],
+        "interval": ["yearly", "yearly", "yearly"],
+        "currency": ["AUD", "AUD", "AUD"],
+        "is_remote": [False, True, False],
+    })
+
+
+class TestFilterJobs:
+    def test_no_filters_returns_all_rows(self, scraper):
+        df = make_multi_df()
+        result = scraper.filter_jobs(df)
+        assert len(result) == 3
+
+    def test_title_include_keeps_matching_rows(self, scraper):
+        df = make_multi_df()
+        result = scraper.filter_jobs(df, title_include=["engineer"])
+        assert len(result) == 2
+        assert all("engineer" in t.lower() for t in result["title"])
+
+    def test_title_include_is_case_insensitive(self, scraper):
+        df = make_multi_df()
+        result = scraper.filter_jobs(df, title_include=["ENGINEER"])
+        assert len(result) == 2
+
+    def test_title_include_multiple_terms_uses_or(self, scraper):
+        df = make_multi_df()
+        result = scraper.filter_jobs(df, title_include=["engineer", "analyst"])
+        assert len(result) == 3
+
+    def test_title_exclude_drops_matching_rows(self, scraper):
+        df = make_multi_df()
+        result = scraper.filter_jobs(df, title_exclude=["Senior"])
+        assert len(result) == 2
+        assert all("senior" not in t.lower() for t in result["title"])
+
+    def test_title_exclude_is_case_insensitive(self, scraper):
+        df = make_multi_df()
+        result = scraper.filter_jobs(df, title_exclude=["senior"])
+        assert len(result) == 2
+
+    def test_title_exclude_multiple_terms_drops_any_match(self, scraper):
+        df = make_multi_df()
+        result = scraper.filter_jobs(df, title_exclude=["Senior", "Analyst"])
+        assert len(result) == 1
+        assert result["title"].iloc[0] == "AI Engineer"
+
+    def test_exclude_companies_drops_exact_match(self, scraper):
+        df = make_multi_df()
+        result = scraper.filter_jobs(df, exclude_companies=["Beta"])
+        assert len(result) == 2
+        assert "Beta" not in result["company"].values
+
+    def test_exclude_companies_is_case_insensitive(self, scraper):
+        df = make_multi_df()
+        result = scraper.filter_jobs(df, exclude_companies=["beta"])
+        assert len(result) == 2
+
+    def test_exclude_companies_exact_match_only(self, scraper):
+        df = make_multi_df()
+        result = scraper.filter_jobs(df, exclude_companies=["Bet"])
+        assert len(result) == 3
+
+    def test_combined_filters_apply_all(self, scraper):
+        df = make_multi_df()
+        result = scraper.filter_jobs(df, title_include=["engineer"], title_exclude=["Senior"])
+        assert len(result) == 1
+        assert result["title"].iloc[0] == "AI Engineer"
+
+    def test_empty_dataframe_returns_empty(self, scraper):
+        result = scraper.filter_jobs(pd.DataFrame())
+        assert result.empty
+
+    def test_verbose_prints_filter_summary_when_rows_dropped(self, scraper, capsys):
+        scraper.verbose = 1
+        df = make_multi_df()
+        scraper.filter_jobs(df, title_exclude=["Senior"])
+        out = capsys.readouterr().out
+        assert "3" in out and "2" in out
+
+
+class TestFilterCliArgs:
+    def test_title_include_arg_exists(self):
+        from main import build_parser
+        parser = build_parser()
+        args = parser.parse_args(["--job", "AI Engineer", "--location", "Australia", "--title_include", "engineer", "analyst"])
+        assert args.title_include == ["engineer", "analyst"]
+
+    def test_title_exclude_arg_exists(self):
+        from main import build_parser
+        parser = build_parser()
+        args = parser.parse_args(["--job", "AI Engineer", "--location", "Australia", "--title_exclude", "Senior"])
+        assert args.title_exclude == ["Senior"]
+
+    def test_exclude_companies_inline_list(self):
+        from main import build_parser
+        parser = build_parser()
+        args = parser.parse_args(["--job", "AI Engineer", "--location", "Australia", "--exclude_companies", "Acme", "Beta"])
+        assert args.exclude_companies == ["Acme", "Beta"]
+
+    def test_filter_args_default_to_none(self):
+        from main import build_parser
+        parser = build_parser()
+        args = parser.parse_args(["--job", "AI Engineer", "--location", "Australia"])
+        assert args.title_include is None
+        assert args.title_exclude is None
+        assert args.exclude_companies is None
+
+    def test_exclude_companies_txt_file(self, tmp_path):
+        from main import build_parser, load_txt_arg
+        companies_file = tmp_path / "companies.txt"
+        companies_file.write_text("Acme\nBeta\n")
+        parser = build_parser()
+        args = parser.parse_args(["--job", "AI Engineer", "--location", "Australia", "--exclude_companies", str(companies_file)])
+        result = load_txt_arg(args.exclude_companies)
+        assert result == ["Acme", "Beta"]

@@ -51,6 +51,9 @@ class JobScraper:
         site_name: list = ["linkedin", "zip_recruiter", "indeed", "google"],  # "glassdoor" returns 400; blocked upstream (speedyapply/JobSpy#270)
         workers: int | None = None,
         overwrite: bool = False,
+        title_include: list[str] | None = None,
+        title_exclude: list[str] | None = None,
+        exclude_companies: list[str] | None = None,
         **kwargs,
     ) -> pd.DataFrame:
         """Scrape job postings from multiple job sites for given job titles and locations.
@@ -117,6 +120,7 @@ class JobScraper:
                 all_jobs[idx] = result
 
         df = self.merge(all_jobs)
+        df = self.filter_jobs(df, title_include=title_include, title_exclude=title_exclude, exclude_companies=exclude_companies)
         df = self._upsert(df, save_path, overwrite)
         df.to_csv(save_path, index=False, quoting=csv.QUOTE_ALL)
         return df
@@ -173,6 +177,30 @@ class JobScraper:
         df = df.drop(columns=self.BLACKLIST, errors="ignore")
         present = [col for col in self.WHITELIST if col in df.columns]
         df = df[present + [col for col in df.columns if col not in present]]
+        return df
+
+    def filter_jobs(
+        self,
+        df: pd.DataFrame,
+        title_include: list[str] | None = None,
+        title_exclude: list[str] | None = None,
+        exclude_companies: list[str] | None = None,
+    ) -> pd.DataFrame:
+        if df.empty:
+            return df
+        before = len(df)
+        if title_include and "title" in df.columns:
+            pattern = "|".join(title_include)
+            df = df[df["title"].str.contains(pattern, case=False, na=False)]
+        if title_exclude and "title" in df.columns:
+            pattern = "|".join(title_exclude)
+            df = df[~df["title"].str.contains(pattern, case=False, na=False)]
+        if exclude_companies and "company" in df.columns:
+            lower_set = {c.lower() for c in exclude_companies}
+            df = df[~df["company"].str.lower().isin(lower_set)]
+        df = df.reset_index(drop=True)
+        if self.verbose >= 1 and len(df) < before:
+            print(f"Filtered: {before} --> {len(df)} jobs")
         return df
 
     def merge(self, all_jobs: list[pd.DataFrame]) -> pd.DataFrame:
