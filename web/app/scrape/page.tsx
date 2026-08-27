@@ -16,11 +16,13 @@ function LinesInput({
   label,
   values,
   onChange,
+  onFlush,
   placeholder,
 }: {
   label: string;
   values: string[];
   onChange: (v: string[]) => void;
+  onFlush?: () => void;
   placeholder?: string;
 }) {
   function handleChange(raw: string) {
@@ -36,6 +38,7 @@ function LinesInput({
         rows={4}
         value={values.join("\n")}
         onChange={(e) => handleChange(e.target.value)}
+        onBlur={onFlush}
         placeholder={placeholder ?? "One per line"}
       />
     </div>
@@ -87,6 +90,7 @@ export default function ScrapePage() {
   const [runError, setRunError] = useState<string | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const configRef = useRef<ScrapeConfig | null>(null);
 
   useEffect(() => {
     loadAll();
@@ -131,8 +135,18 @@ export default function ScrapePage() {
     if (!config) return;
     const next = { ...config, ...patch };
     setConfig(next);
+    configRef.current = next;
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => saveConfig(next), 800);
+  }
+
+  function flushConfig() {
+    if (!configRef.current) return;
+    if (saveTimer.current) {
+      clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+    }
+    saveConfig(configRef.current);
   }
 
   async function saveConfig(cfg: ScrapeConfig) {
@@ -225,12 +239,14 @@ export default function ScrapePage() {
           label="Job titles"
           values={config.job}
           onChange={(v) => updateConfig({ job: v })}
+          onFlush={flushConfig}
           placeholder={"AI Engineer\nML Engineer\nData Scientist"}
         />
         <LinesInput
           label="Locations"
           values={config.location}
           onChange={(v) => updateConfig({ location: v })}
+          onFlush={flushConfig}
           placeholder={"Australia\nVietnam\nRemote"}
         />
 
@@ -280,12 +296,14 @@ export default function ScrapePage() {
           label="Exclude titles containing"
           values={config.title_exclude}
           onChange={(v) => updateConfig({ title_exclude: v })}
+          onFlush={flushConfig}
           placeholder={"Senior\nManager\nDirector"}
         />
         <LinesInput
           label="Exclude companies"
           values={config.exclude_companies}
           onChange={(v) => updateConfig({ exclude_companies: v })}
+          onFlush={flushConfig}
           placeholder={"Acme Corp\nRecruitment Agency"}
         />
       </div>
