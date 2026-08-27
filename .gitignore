@@ -1,5 +1,13 @@
+# Python
 .venv/
 __pycache__/
 *.py[cod]
 *.csv
 .geocache.json
+
+# Profile data (user-specific, not committed)
+data/
+
+# Next.js
+web/.next/
+web/node_modules/
