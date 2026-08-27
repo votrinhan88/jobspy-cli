@@ -460,3 +460,385 @@ body {
   padding: 24px 0;
   margin: 0;
 }
+
+.empty-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 32px;
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  background: var(--app-panel);
+}
+
+.empty-card-text {
+  font-size: 14px;
+  color: var(--app-ink-muted);
+  margin: 0;
+}
+
+/* ── Page layout variants ───────────────────────────────────────────────── */
+
+.page-content--wide {
+  max-width: 1200px;
+}
+
+.page-header--row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.count-badge {
+  font-size: 12px;
+  color: var(--app-ink-muted);
+}
+
+.saving-indicator {
+  font-size: 12px;
+  color: var(--app-ink-muted);
+}
+
+.loading-row {
+  font-size: 14px;
+  color: var(--app-ink-muted);
+  padding: 24px 0;
+}
+
+/* ── Input variants ─────────────────────────────────────────────────────── */
+
+.input--search {
+  max-width: 260px;
+  flex: none;
+}
+
+.input--sm {
+  max-width: 100px;
+  flex: none;
+}
+
+/* ── Button variant ─────────────────────────────────────────────────────── */
+
+.btn-sm {
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+/* ── Table ──────────────────────────────────────────────────────────────── */
+
+.table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  background: var(--app-panel);
+}
+
+.jobs-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.jobs-table th {
+  padding: 10px 14px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--app-ink-muted);
+  border-bottom: 1px solid var(--app-border);
+  white-space: nowrap;
+}
+
+.jobs-table td {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--app-border);
+  vertical-align: middle;
+}
+
+.jobs-table tr:last-child td {
+  border-bottom: none;
+}
+
+.jobs-table tbody tr:hover {
+  background: var(--app-surface);
+}
+
+.job-title-cell {
+  max-width: 320px;
+}
+
+.job-link {
+  color: var(--app-ink);
+  text-decoration: none;
+  font-weight: 500;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.job-link:hover {
+  color: var(--app-accent);
+  text-decoration: underline;
+}
+
+.muted {
+  color: var(--app-ink-muted);
+}
+
+.mono {
+  font-family: var(--app-mono);
+  font-size: 12px;
+}
+
+.action-cell {
+  width: 90px;
+  text-align: right;
+}
+
+/* ── Status chips ───────────────────────────────────────────────────────── */
+
+.status-chip {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border: 1px solid transparent;
+}
+
+.status-chip--none {
+  background: var(--app-surface);
+  color: var(--app-ink-muted);
+  border-color: var(--app-border);
+}
+
+.status-chip--shortlisted {
+  background: color-mix(in srgb, #2563eb 10%, transparent);
+  color: #1d4ed8;
+  border-color: color-mix(in srgb, #2563eb 25%, transparent);
+}
+
+.status-chip--applied {
+  background: color-mix(in srgb, #7c3aed 10%, transparent);
+  color: #6d28d9;
+  border-color: color-mix(in srgb, #7c3aed 25%, transparent);
+}
+
+.status-chip--interview {
+  background: color-mix(in srgb, #d97706 10%, transparent);
+  color: #b45309;
+  border-color: color-mix(in srgb, #d97706 25%, transparent);
+}
+
+.status-chip--offer {
+  background: color-mix(in srgb, #059669 10%, transparent);
+  color: #047857;
+  border-color: color-mix(in srgb, #059669 25%, transparent);
+}
+
+.status-chip--rejected {
+  background: color-mix(in srgb, #dc2626 10%, transparent);
+  color: #b91c1c;
+  border-color: color-mix(in srgb, #dc2626 25%, transparent);
+}
+
+.status-chip--skipped {
+  background: var(--app-surface);
+  color: var(--app-ink-muted);
+  border-color: var(--app-border);
+}
+
+/* Dark-mode chip overrides */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .status-chip--shortlisted {
+    color: #93c5fd;
+  }
+  :root:not([data-theme="light"]) .status-chip--applied {
+    color: #c4b5fd;
+  }
+  :root:not([data-theme="light"]) .status-chip--interview {
+    color: #fcd34d;
+  }
+  :root:not([data-theme="light"]) .status-chip--offer {
+    color: #6ee7b7;
+  }
+  :root:not([data-theme="light"]) .status-chip--rejected {
+    color: #fca5a5;
+  }
+}
+
+:root[data-theme="dark"] .status-chip--shortlisted { color: #93c5fd; }
+:root[data-theme="dark"] .status-chip--applied { color: #c4b5fd; }
+:root[data-theme="dark"] .status-chip--interview { color: #fcd34d; }
+:root[data-theme="dark"] .status-chip--offer { color: #6ee7b7; }
+:root[data-theme="dark"] .status-chip--rejected { color: #fca5a5; }
+
+/* ── Scrape status banner ───────────────────────────────────────────────── */
+
+.status-banner {
+  padding: 12px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  margin-bottom: 24px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid transparent;
+}
+
+.status-banner--running {
+  background: color-mix(in srgb, var(--app-accent) 8%, transparent);
+  color: var(--app-accent);
+  border-color: color-mix(in srgb, var(--app-accent) 20%, transparent);
+}
+
+.status-banner--done {
+  background: var(--app-success-bg);
+  color: var(--app-success-text);
+  border-color: color-mix(in srgb, var(--app-success-text) 20%, transparent);
+}
+
+.status-banner--error {
+  background: var(--app-error-bg);
+  color: var(--app-error-text);
+  border-color: color-mix(in srgb, var(--app-error-text) 20%, transparent);
+}
+
+.status-ts {
+  color: inherit;
+  opacity: 0.7;
+}
+
+/* ── Spinner ────────────────────────────────────────────────────────────── */
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+/* ── Form grid (Scrape page) ────────────────────────────────────────────── */
+
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-field--full {
+  grid-column: 1 / -1;
+}
+
+.form-label {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--app-ink-muted);
+}
+
+/* ── Tag input ──────────────────────────────────────────────────────────── */
+
+.tag-input-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--app-border);
+  border-radius: 6px;
+  background: var(--app-panel);
+  min-height: 40px;
+  align-items: center;
+  transition: border-color 0.12s;
+}
+
+.tag-input-wrap:focus-within {
+  border-color: var(--app-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-accent) 12%, transparent);
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  background: color-mix(in srgb, var(--app-accent) 12%, transparent);
+  color: var(--app-accent);
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.tag-remove {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: inherit;
+  padding: 0;
+  line-height: 1;
+  font-size: 14px;
+  opacity: 0.7;
+}
+
+.tag-remove:hover {
+  opacity: 1;
+}
+
+.tag-input-field {
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 13px;
+  font-family: var(--app-font);
+  color: var(--app-ink);
+  min-width: 140px;
+  flex: 1;
+}
+
+/* ── Checkboxes ─────────────────────────────────────────────────────────── */
+
+.checkbox-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--app-ink);
+  cursor: pointer;
+}
