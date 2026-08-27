@@ -117,22 +117,39 @@ class JobScraper:
                 all_jobs[idx] = result
 
         df = self.merge(all_jobs)
-        df = self._append(df, save_path, overwrite)
+        df = self._upsert(df, save_path, overwrite)
         df.to_csv(save_path, index=False, quoting=csv.QUOTE_ALL)
         return df
 
-    def _append(self, df: pd.DataFrame, save_path: str, overwrite: bool) -> pd.DataFrame:
+    # Fields preserved from the existing row on upsert (never overwritten by a new scrape).
+    _PRESERVE_ON_UPSERT = {"status", "location"}
+
+    def _upsert(self, df: pd.DataFrame, save_path: str, overwrite: bool) -> pd.DataFrame:
         if overwrite or not os.path.exists(save_path):
             return df
         existing = pd.read_csv(save_path)
         before = len(existing)
+
         if "job_url" in df.columns and "job_url" in existing.columns:
-            combined = pd.concat([existing, df], ignore_index=True)
-            combined = combined.drop_duplicates(subset=["job_url"], keep="first")
+            existing_index = existing.set_index("job_url")
+            new_rows = []
+            for _, row in df.iterrows():
+                url = row["job_url"]
+                if url in existing_index.index:
+                    # Update job data fields; preserve protected columns from existing row.
+                    for col in existing_index.columns:
+                        if col not in self._PRESERVE_ON_UPSERT and col in row.index:
+                            existing_index.at[url, col] = row[col]
+                else:
+                    new_rows.append(row)
+            combined = existing_index.reset_index()
+            if new_rows:
+                combined = pd.concat([combined, pd.DataFrame(new_rows)], ignore_index=True)
         else:
             dedup_cols = [c for c in ["title", "company", "location", "date_posted"] if c in df.columns and c in existing.columns]
             combined = pd.concat([existing, df], ignore_index=True)
             combined = combined.drop_duplicates(subset=dedup_cols, keep="first")
+
         combined = combined.reset_index(drop=True)
         if self.verbose >= 1:
             print(f"Appended: {len(combined) - before} new jobs ({len(combined)} total)")

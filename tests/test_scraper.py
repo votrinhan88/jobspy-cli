@@ -223,77 +223,106 @@ class TestWorkersCliArg:
 
 
 # ---------------------------------------------------------------------------
-# Incremental append + dedup across runs
+# Upsert across runs
 # ---------------------------------------------------------------------------
 
-class TestIncrementalAppend:
-    def _run(self, scraper, mocker, tmp_path, df, **call_kwargs):
-        mocker.patch.object(scraper, "_scrape_pair", return_value=df)
-        mocker.patch.object(scraper, "merge", side_effect=lambda dfs: pd.concat(dfs, ignore_index=True) if any(not d.empty for d in dfs) else pd.DataFrame())
-        save_path = str(tmp_path / "jobs.csv")
-        return scraper(save_path=save_path, job=["AI Engineer"], location=["Australia"], results_wanted=5, **call_kwargs), save_path
+def make_df2(**overrides):
+    """Second distinct job row for multi-row tests."""
+    base = {
+        "title": ["ML Engineer"],
+        "company": ["Beta"],
+        "location": ["Melbourne, Australia"],
+        "date_posted": ["2026-08-27"],
+        "job_url": ["https://example.com/job/2"],
+        "interval": ["yearly"],
+        "min_amount": [90000],
+        "max_amount": [130000],
+        "currency": ["AUD"],
+        "is_remote": [True],
+    }
+    base.update(overrides)
+    return pd.DataFrame(base)
 
-    def test_second_run_does_not_duplicate_existing_rows(self, scraper, mocker, tmp_path):
+
+class TestUpsert:
+    def _call_upsert(self, scraper, existing_df, new_df, save_path, overwrite=False):
+        existing_df.to_csv(save_path, index=False)
+        return scraper._upsert(new_df, save_path, overwrite)
+
+    def test_new_file_returns_new_df(self, scraper, tmp_path):
+        save_path = str(tmp_path / "jobs.csv")
         df = make_df()
-        _, save_path = self._run(scraper, mocker, tmp_path, df)
-        self._run(scraper, mocker, tmp_path, df)
-        result = pd.read_csv(save_path)
+        result = scraper._upsert(df, save_path, overwrite=False)
         assert len(result) == 1
 
-    def test_second_run_appends_new_rows(self, scraper, mocker, tmp_path):
-        df1 = make_df()
-        _, save_path = self._run(scraper, mocker, tmp_path, df1)
-        df2 = make_df(
-            title=["ML Engineer"],
-            company=["Beta"],
-            location=["Melbourne, Australia"],
-            job_url=["https://example.com/job/2"],
-            date_posted=["2026-08-27"],
-        )
-        self._run(scraper, mocker, tmp_path, df2)
-        result = pd.read_csv(save_path)
-        assert len(result) == 2
-
-    def test_overwrite_replaces_existing_file(self, scraper, mocker, tmp_path):
-        df = make_df()
-        _, save_path = self._run(scraper, mocker, tmp_path, df)
-        df2 = make_df(
-            title=["ML Engineer"],
-            company=["Beta"],
-            location=["Melbourne, Australia"],
-            job_url=["https://example.com/job/2"],
-            date_posted=["2026-08-27"],
-        )
-        self._run(scraper, mocker, tmp_path, df2, overwrite=True)
-        result = pd.read_csv(save_path)
+    def test_overwrite_ignores_existing(self, scraper, tmp_path):
+        save_path = str(tmp_path / "jobs.csv")
+        existing = make_df()
+        new = make_df2()
+        result = self._call_upsert(scraper, existing, new, save_path, overwrite=True)
         assert len(result) == 1
         assert result["title"].iloc[0] == "ML Engineer"
 
-    def test_dedup_falls_back_when_job_url_absent(self, scraper, mocker, tmp_path):
-        df = make_df()
-        df = df.drop(columns=["job_url"])
-        _, save_path = self._run(scraper, mocker, tmp_path, df)
-        self._run(scraper, mocker, tmp_path, df)
-        result = pd.read_csv(save_path)
+    def test_new_job_url_is_appended(self, scraper, tmp_path):
+        save_path = str(tmp_path / "jobs.csv")
+        existing = make_df()
+        new = make_df2()
+        result = self._call_upsert(scraper, existing, new, save_path)
+        assert len(result) == 2
+
+    def test_known_job_url_is_not_duplicated(self, scraper, tmp_path):
+        save_path = str(tmp_path / "jobs.csv")
+        existing = make_df()
+        result = self._call_upsert(scraper, existing, make_df(), save_path)
         assert len(result) == 1
 
-    def test_verbose_prints_new_job_count(self, scraper, mocker, tmp_path, capsys):
+    def test_known_job_url_updates_salary(self, scraper, tmp_path):
+        save_path = str(tmp_path / "jobs.csv")
+        existing = make_df()
+        updated = make_df(max_amount=[200000])
+        result = self._call_upsert(scraper, existing, updated, save_path)
+        assert result["max_amount"].iloc[0] == 200000
+
+    def test_known_job_url_preserves_status(self, scraper, tmp_path):
+        save_path = str(tmp_path / "jobs.csv")
+        existing = make_df()
+        existing["status"] = "applied"
+        updated = make_df(max_amount=[200000])
+        updated["status"] = ""
+        result = self._call_upsert(scraper, existing, updated, save_path)
+        assert result["status"].iloc[0] == "applied"
+
+    def test_known_job_url_preserves_location(self, scraper, tmp_path):
+        save_path = str(tmp_path / "jobs.csv")
+        existing = make_df(location=["Sydney, Australia (geocoded)"])
+        updated = make_df(location=["Sydney NSW"])
+        result = self._call_upsert(scraper, existing, updated, save_path)
+        assert result["location"].iloc[0] == "Sydney, Australia (geocoded)"
+
+    def test_no_job_url_deduplicates_on_title_company_location_date(self, scraper, tmp_path):
+        save_path = str(tmp_path / "jobs.csv")
+        existing = make_df().drop(columns=["job_url"])
+        new = make_df().drop(columns=["job_url"])
+        result = self._call_upsert(scraper, existing, new, save_path)
+        assert len(result) == 1
+
+    def test_no_job_url_appends_different_location(self, scraper, tmp_path):
+        save_path = str(tmp_path / "jobs.csv")
+        existing = make_df().drop(columns=["job_url"])
+        new = make_df(location=["Melbourne, Australia"]).drop(columns=["job_url"])
+        result = self._call_upsert(scraper, existing, new, save_path)
+        assert len(result) == 2
+
+    def test_verbose_prints_new_count(self, scraper, tmp_path, capsys):
         scraper.verbose = 1
-        df1 = make_df()
-        _, save_path = self._run(scraper, mocker, tmp_path, df1)
-        df2 = make_df(
-            title=["ML Engineer"],
-            company=["Beta"],
-            location=["Melbourne, Australia"],
-            job_url=["https://example.com/job/2"],
-            date_posted=["2026-08-27"],
-        )
-        self._run(scraper, mocker, tmp_path, df2)
+        save_path = str(tmp_path / "jobs.csv")
+        existing = make_df()
+        result = self._call_upsert(scraper, existing, make_df2(), save_path)
         out = capsys.readouterr().out
         assert "1 new" in out
 
 
-class TestIncrementalCliArgs:
+class TestUpsertCliArgs:
     def test_overwrite_flag_exists(self):
         from main import build_parser
         parser = build_parser()
