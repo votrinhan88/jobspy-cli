@@ -560,7 +560,7 @@ nextjs-portal {
 }
 
 .input--textarea {
-  resize: vertical;
+  resize: none;
   min-height: 96px;
   max-height: calc(10 * 1.6 * 14px + 16px);
   max-width: 100%;
