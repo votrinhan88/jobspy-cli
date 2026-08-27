@@ -1,4 +1,5 @@
 import csv
+import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Lock
 
@@ -49,6 +50,7 @@ class JobScraper:
         results_wanted: int = 10,
         site_name: list = ["linkedin", "zip_recruiter", "indeed", "google"],  # "glassdoor" returns 400; blocked upstream (speedyapply/JobSpy#270)
         workers: int | None = None,
+        overwrite: bool = False,
         **kwargs,
     ) -> pd.DataFrame:
         """Scrape job postings from multiple job sites for given job titles and locations.
@@ -115,8 +117,26 @@ class JobScraper:
                 all_jobs[idx] = result
 
         df = self.merge(all_jobs)
+        df = self._append(df, save_path, overwrite)
         df.to_csv(save_path, index=False, quoting=csv.QUOTE_ALL)
         return df
+
+    def _append(self, df: pd.DataFrame, save_path: str, overwrite: bool) -> pd.DataFrame:
+        if overwrite or not os.path.exists(save_path):
+            return df
+        existing = pd.read_csv(save_path)
+        before = len(existing)
+        if "job_url" in df.columns and "job_url" in existing.columns:
+            combined = pd.concat([existing, df], ignore_index=True)
+            combined = combined.drop_duplicates(subset=["job_url"], keep="first")
+        else:
+            dedup_cols = [c for c in ["title", "company", "location", "date_posted"] if c in df.columns and c in existing.columns]
+            combined = pd.concat([existing, df], ignore_index=True)
+            combined = combined.drop_duplicates(subset=dedup_cols, keep="first")
+        combined = combined.reset_index(drop=True)
+        if self.verbose >= 1:
+            print(f"Appended: {len(combined) - before} new jobs ({len(combined)} total)")
+        return combined
 
     def _scrape_pair(self, job: str, location: str, site_name: list, results_wanted: int, **kwargs) -> pd.DataFrame:
         df = scrape_jobs(

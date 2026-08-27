@@ -220,3 +220,88 @@ class TestWorkersCliArg:
         parser = build_parser()
         args = parser.parse_args(["--job", "AI Engineer", "--location", "Australia"])
         assert args.workers == 4
+
+
+# ---------------------------------------------------------------------------
+# Incremental append + dedup across runs
+# ---------------------------------------------------------------------------
+
+class TestIncrementalAppend:
+    def _run(self, scraper, mocker, tmp_path, df, **call_kwargs):
+        mocker.patch.object(scraper, "_scrape_pair", return_value=df)
+        mocker.patch.object(scraper, "merge", side_effect=lambda dfs: pd.concat(dfs, ignore_index=True) if any(not d.empty for d in dfs) else pd.DataFrame())
+        save_path = str(tmp_path / "jobs.csv")
+        return scraper(save_path=save_path, job=["AI Engineer"], location=["Australia"], results_wanted=5, **call_kwargs), save_path
+
+    def test_second_run_does_not_duplicate_existing_rows(self, scraper, mocker, tmp_path):
+        df = make_df()
+        _, save_path = self._run(scraper, mocker, tmp_path, df)
+        self._run(scraper, mocker, tmp_path, df)
+        result = pd.read_csv(save_path)
+        assert len(result) == 1
+
+    def test_second_run_appends_new_rows(self, scraper, mocker, tmp_path):
+        df1 = make_df()
+        _, save_path = self._run(scraper, mocker, tmp_path, df1)
+        df2 = make_df(
+            title=["ML Engineer"],
+            company=["Beta"],
+            location=["Melbourne, Australia"],
+            job_url=["https://example.com/job/2"],
+            date_posted=["2026-08-27"],
+        )
+        self._run(scraper, mocker, tmp_path, df2)
+        result = pd.read_csv(save_path)
+        assert len(result) == 2
+
+    def test_overwrite_replaces_existing_file(self, scraper, mocker, tmp_path):
+        df = make_df()
+        _, save_path = self._run(scraper, mocker, tmp_path, df)
+        df2 = make_df(
+            title=["ML Engineer"],
+            company=["Beta"],
+            location=["Melbourne, Australia"],
+            job_url=["https://example.com/job/2"],
+            date_posted=["2026-08-27"],
+        )
+        self._run(scraper, mocker, tmp_path, df2, overwrite=True)
+        result = pd.read_csv(save_path)
+        assert len(result) == 1
+        assert result["title"].iloc[0] == "ML Engineer"
+
+    def test_dedup_falls_back_when_job_url_absent(self, scraper, mocker, tmp_path):
+        df = make_df()
+        df = df.drop(columns=["job_url"])
+        _, save_path = self._run(scraper, mocker, tmp_path, df)
+        self._run(scraper, mocker, tmp_path, df)
+        result = pd.read_csv(save_path)
+        assert len(result) == 1
+
+    def test_verbose_prints_new_job_count(self, scraper, mocker, tmp_path, capsys):
+        scraper.verbose = 1
+        df1 = make_df()
+        _, save_path = self._run(scraper, mocker, tmp_path, df1)
+        df2 = make_df(
+            title=["ML Engineer"],
+            company=["Beta"],
+            location=["Melbourne, Australia"],
+            job_url=["https://example.com/job/2"],
+            date_posted=["2026-08-27"],
+        )
+        self._run(scraper, mocker, tmp_path, df2)
+        out = capsys.readouterr().out
+        assert "1 new" in out
+
+
+class TestIncrementalCliArgs:
+    def test_overwrite_flag_exists(self):
+        from main import build_parser
+        parser = build_parser()
+        args = parser.parse_args(["--job", "AI Engineer", "--location", "Australia", "--overwrite"])
+        assert args.overwrite is True
+
+    def test_overwrite_default_is_false(self):
+        from main import build_parser
+        parser = build_parser()
+        args = parser.parse_args(["--job", "AI Engineer", "--location", "Australia"])
+        assert args.overwrite is False
