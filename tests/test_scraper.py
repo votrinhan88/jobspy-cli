@@ -463,3 +463,104 @@ class TestFilterCliArgs:
         args = parser.parse_args(["--job", "AI Engineer", "--location", "Australia", "--exclude_companies", str(companies_file)])
         result = load_txt_arg(args.exclude_companies)
         assert result == ["Acme", "Beta"]
+
+
+# ---------------------------------------------------------------------------
+# Data model columns: job_id, status, status_updated_at
+# ---------------------------------------------------------------------------
+
+class TestJobId:
+    def test_job_id_column_present_after_add_metadata(self, scraper):
+        df = make_df()
+        result = scraper._add_metadata(df)
+        assert "job_id" in result.columns
+
+    def test_job_id_is_kebab_slug_with_hash(self, scraper):
+        df = make_df()
+        result = scraper._add_metadata(df)
+        job_id = result["job_id"].iloc[0]
+        assert job_id.startswith("acme-ai-engineer-")
+        assert len(job_id.split("-")[-1]) == 8
+
+    def test_job_id_segments_truncated_to_20_chars(self, scraper):
+        df = make_df(
+            company=["A" * 30],
+            title=["B" * 30],
+        )
+        result = scraper._add_metadata(df)
+        job_id = result["job_id"].iloc[0]
+        parts = job_id.split("-")
+        # hash is last segment; company and title segments each <= 20 chars
+        assert all(len(p) <= 20 for p in parts[:-1])
+
+    def test_job_id_stable_across_calls(self, scraper):
+        df = make_df()
+        id1 = scraper._add_metadata(df)["job_id"].iloc[0]
+        id2 = scraper._add_metadata(df)["job_id"].iloc[0]
+        assert id1 == id2
+
+    def test_job_id_uses_fallback_when_no_job_url(self, scraper):
+        df = make_df().drop(columns=["job_url"])
+        result = scraper._add_metadata(df)
+        assert "job_id" in result.columns
+        assert result["job_id"].iloc[0] != ""
+
+    def test_job_id_differs_for_different_jobs(self, scraper):
+        df1 = make_df()
+        df2 = make_df(job_url=["https://example.com/job/999"])
+        id1 = scraper._add_metadata(df1)["job_id"].iloc[0]
+        id2 = scraper._add_metadata(df2)["job_id"].iloc[0]
+        assert id1 != id2
+
+
+class TestStatusColumns:
+    def test_status_column_present(self, scraper):
+        df = make_df()
+        result = scraper._add_metadata(df)
+        assert "status" in result.columns
+
+    def test_status_defaults_to_empty_string(self, scraper):
+        df = make_df()
+        result = scraper._add_metadata(df)
+        assert result["status"].iloc[0] == ""
+
+    def test_status_updated_at_column_present(self, scraper):
+        df = make_df()
+        result = scraper._add_metadata(df)
+        assert "status_updated_at" in result.columns
+
+    def test_status_updated_at_defaults_to_empty_string(self, scraper):
+        df = make_df()
+        result = scraper._add_metadata(df)
+        assert result["status_updated_at"].iloc[0] == ""
+
+
+class TestUpsertPreservesMetadata:
+    def test_upsert_preserves_job_id(self, scraper, tmp_path):
+        save_path = str(tmp_path / "jobs.csv")
+        existing = make_df()
+        existing["job_id"] = "acme-ai-engineer-aabbccdd"
+        existing["status"] = ""
+        existing["status_updated_at"] = ""
+        existing.to_csv(save_path, index=False)
+        updated = make_df(max_amount=[200000])
+        updated["job_id"] = "acme-ai-engineer-aabbccdd"
+        updated["status"] = ""
+        updated["status_updated_at"] = ""
+        result = scraper._upsert(updated, save_path, overwrite=False)
+        assert result["job_id"].iloc[0] == "acme-ai-engineer-aabbccdd"
+
+    def test_upsert_preserves_status(self, scraper, tmp_path):
+        save_path = str(tmp_path / "jobs.csv")
+        existing = make_df()
+        existing["job_id"] = "acme-ai-engineer-aabbccdd"
+        existing["status"] = "applied"
+        existing["status_updated_at"] = "2026-08-27T08:00:00"
+        existing.to_csv(save_path, index=False)
+        updated = make_df(max_amount=[200000])
+        updated["job_id"] = "acme-ai-engineer-aabbccdd"
+        updated["status"] = ""
+        updated["status_updated_at"] = ""
+        result = scraper._upsert(updated, save_path, overwrite=False)
+        assert result["status"].iloc[0] == "applied"
+        assert result["status_updated_at"].iloc[0] == "2026-08-27T08:00:00"

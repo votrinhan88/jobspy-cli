@@ -1,5 +1,7 @@
 import csv
+import hashlib
 import os
+import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Lock
 
@@ -121,12 +123,42 @@ class JobScraper:
 
         df = self.merge(all_jobs)
         df = self.filter_jobs(df, title_include=title_include, title_exclude=title_exclude, exclude_companies=exclude_companies)
+        df = self._add_metadata(df)
         df = self._upsert(df, save_path, overwrite)
         df.to_csv(save_path, index=False, quoting=csv.QUOTE_ALL)
         return df
 
     # Fields preserved from the existing row on upsert (never overwritten by a new scrape).
-    _PRESERVE_ON_UPSERT = {"status", "location"}
+    _PRESERVE_ON_UPSERT = {"status", "status_updated_at", "location", "job_id"}
+    _JOB_ID_SEGMENT_MAX = 20
+
+    @staticmethod
+    def _slugify(text: str, max_len: int) -> str:
+        text = text.lower().strip()[:max_len]
+        text = re.sub(r"[^a-z0-9]+", "-", text)
+        return text.strip("-")
+
+    def _make_job_id(self, row: "pd.Series") -> str:
+        if "job_url" in row.index and pd.notna(row["job_url"]) and row["job_url"]:
+            seed = str(row["job_url"])
+        else:
+            seed = "|".join(str(row.get(c, "")) for c in ["title", "company", "location", "date_posted"])
+        hash8 = hashlib.md5(seed.encode()).hexdigest()[:8]
+        company = self._slugify(str(row.get("company", "")), self._JOB_ID_SEGMENT_MAX)
+        title = self._slugify(str(row.get("title", "")), self._JOB_ID_SEGMENT_MAX)
+        return f"{company}-{title}-{hash8}"
+
+    def _add_metadata(self, df: pd.DataFrame) -> pd.DataFrame:
+        if df.empty:
+            return df
+        if "job_id" not in df.columns:
+            df = df.copy()
+            df["job_id"] = df.apply(self._make_job_id, axis=1)
+        if "status" not in df.columns:
+            df["status"] = ""
+        if "status_updated_at" not in df.columns:
+            df["status_updated_at"] = ""
+        return df
 
     def _upsert(self, df: pd.DataFrame, save_path: str, overwrite: bool) -> pd.DataFrame:
         if overwrite or not os.path.exists(save_path):
@@ -143,6 +175,7 @@ class JobScraper:
                     # Update job data fields; preserve protected columns from existing row.
                     for col in existing_index.columns:
                         if col not in self._PRESERVE_ON_UPSERT and col in row.index:
+                            existing_index[col] = existing_index[col].astype(object)
                             existing_index.at[url, col] = row[col]
                 else:
                     new_rows.append(row)
