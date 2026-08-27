@@ -530,6 +530,7 @@ body {
 .input--textarea {
   resize: vertical;
   min-height: 96px;
+  max-height: calc(10 * 1.6 * 14px + 16px);
   max-width: 100%;
   line-height: 1.6;
   font-family: var(--app-font);

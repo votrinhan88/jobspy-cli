@@ -35,7 +35,7 @@ function LinesInput({
       <label className="form-label">{label}</label>
       <textarea
         className="input input--textarea"
-        rows={4}
+        rows={10}
         value={values.join("\n")}
         onChange={(e) => handleChange(e.target.value)}
         onBlur={onFlush}
