@@ -1,4 +1,6 @@
 import csv
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from threading import Lock
 
 from jobspy import scrape_jobs
 import pandas as pd
@@ -33,6 +35,8 @@ class JobScraper:
         "job_url",
     ]
 
+    _SCRAPE_WORKERS = 4
+
     def __init__(self, verbose: int = 0):
         self.verbose = verbose
         self._geocoder = Geocoder(verbose=verbose)
@@ -44,6 +48,7 @@ class JobScraper:
         location: str | list[str],
         results_wanted: int = 10,
         site_name: list = ["linkedin", "zip_recruiter", "indeed", "google"],  # "glassdoor" returns 400; blocked upstream (speedyapply/JobSpy#270)
+        workers: int | None = None,
         **kwargs,
     ) -> pd.DataFrame:
         """Scrape job postings from multiple job sites for given job titles and locations.
@@ -88,30 +93,42 @@ class JobScraper:
         if isinstance(location, str):
             location = [location]
 
-        all_jobs = []
-        counter = 1
-        total = len(job) * len(location)
-        for j in job:
-            for l in location:
-                df = scrape_jobs(
-                    site_name=site_name,
-                    search_term=j,
-                    google_search_term=f"{j} {l}",
-                    location=l,
-                    results_wanted=results_wanted,
-                    verbose=self.verbose,
-                    **kwargs,
-                )
-                df = self.clean_job_list(df)
-                all_jobs.append(df)
+        pairs = [(j, l) for j in job for l in location]
+        total = len(pairs)
+        max_workers = workers if workers is not None else self._SCRAPE_WORKERS
+        counter_lock = Lock()
+        counter = [0]
+        all_jobs = [None] * total
 
+        def _run(idx, j, l):
+            result = self._scrape_pair(j, l, site_name, results_wanted, **kwargs)
+            with counter_lock:
+                counter[0] += 1
                 if self.verbose >= 1:
-                    print(f"[{counter}/{total}] Found: {len(df)} jobs for '{j}' @ '{l}'")
-                counter += 1
+                    print(f"[{counter[0]}/{total}] Found: {len(result)} jobs for '{j}' @ '{l}'")
+            return idx, result
+
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [executor.submit(_run, i, j, l) for i, (j, l) in enumerate(pairs)]
+            for future in as_completed(futures):
+                idx, result = future.result()
+                all_jobs[idx] = result
 
         df = self.merge(all_jobs)
         df.to_csv(save_path, index=False, quoting=csv.QUOTE_ALL)
         return df
+
+    def _scrape_pair(self, job: str, location: str, site_name: list, results_wanted: int, **kwargs) -> pd.DataFrame:
+        df = scrape_jobs(
+            site_name=site_name,
+            search_term=job,
+            google_search_term=f"{job} {location}",
+            location=location,
+            results_wanted=results_wanted,
+            verbose=self.verbose,
+            **kwargs,
+        )
+        return self.clean_job_list(df)
 
     def clean_job_list(self, df: pd.DataFrame) -> pd.DataFrame:
         if df.empty:

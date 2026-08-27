@@ -16,6 +16,7 @@ def build_parser() -> argparse.ArgumentParser:
     optional_group.add_argument("--results_wanted", type=int, default=10, help="Number of job results to fetch per (job, location) pair.")
     optional_group.add_argument("--site_name", type=str, nargs='+', default=["linkedin", "zip_recruiter", "indeed", "google"], help="List of job sites to scrape from.")
     optional_group.add_argument("--verbose", type=int, default=1, help="Verbosity level: 0 (errors only), 1 (errors + warnings), 2 (all logs)")
+    optional_group.add_argument("--workers", type=int, default=4, help="Number of parallel scraping workers (default: 4)")
 
     auxiliary_group = parser.add_argument_group('Auxiliary arguments')
     auxiliary_group.add_argument("--distance", type=int, default=50, help="Distance in miles (default: 50)")
@@ -79,6 +80,7 @@ def main() -> None:
         location=args.location,
         results_wanted=args.results_wanted,
         site_name=args.site_name,
+        workers=args.workers,
         **scraper_kwargs,
     )
 
