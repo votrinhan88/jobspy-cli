@@ -6,6 +6,8 @@ A Python CLI wrapper around [JobSpy](https://github.com/speedyapply/JobSpy) that
 
 Always follow the instructions in `.claude/skills/asd-ste100/skill.md` for all text output — error messages, docstrings, CLI help strings, and comments.
 
+Always follow the instructions in `.claude/skills/test-driven-development/skill.md` when implementing any feature or bugfix.
+
 ## Critical Rules
 
 - No hardcoded secrets or credentials
