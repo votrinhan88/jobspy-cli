@@ -8,6 +8,12 @@ Always follow the instructions in `.claude/skills/asd-ste100/skill.md` for all t
 
 Always follow the instructions in `.claude/skills/test-driven-development/skill.md` when implementing any feature or bugfix.
 
+## UI/UX Skills (invoke when doing web app work)
+
+- `.claude/skills/design/SKILL.md` — visual design, layouts, component design
+- `.claude/skills/design-system/SKILL.md` — design tokens, component specs, Tailwind integration
+- `.claude/skills/brand/SKILL.md` — brand voice, visual identity, consistency
+
 ## Critical Rules
 
 - No hardcoded secrets or credentials
@@ -16,16 +22,24 @@ Always follow the instructions in `.claude/skills/test-driven-development/skill.
 
 ## Stack
 
+**Python engine** (scraping)
 - Python 3.12, managed with `uv`
 - Key deps: `python-jobspy`, `geopy`, `pandas`
 - Dev deps: `pytest`, `pytest-mock`
-- Entry point: `main.py` (`JobScraper` class + argparse CLI); pending refactor into `scraper.py`, `geocoder.py`, `main.py`
+- Modules: `scraper.py` (JobScraper), `geocoder.py` (Geocoder), `main.py` (CLI)
+
+**Web app** (`web/`)
+- Next.js, TypeScript, App Router
+- shadcn/ui, Tailwind CSS
+- pnpm
+- Data: flat files under `data/{profile}/`
 
 ## Available Commands
 
 - `uv run python ./main.py --help` — show all CLI arguments
 - `uv run pytest` — run test suite
 - `uv sync` — install/update dependencies
+- `cd web && pnpm dev` — start web app dev server
 
 ## Git Workflow
 
