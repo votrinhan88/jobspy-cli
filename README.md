@@ -1,6 +1,8 @@
 # JobScrape
 
-JobScrape is a Python wrapper for [JobSpy](https://github.com/speedyapply/JobSpy), designed to efficiently scrape job postings from multiple boards (LinkedIn, Glassdoor, etc.) with minimal post-processing and CLI support. Ideal for analyzing job trends or automating job searches.
+JobScrape is a Python wrapper for [JobSpy](https://github.com/speedyapply/JobSpy), designed to efficiently scrape job postings from multiple boards (LinkedIn, Indeed, ZipRecruiter, Google Jobs) with minimal post-processing and CLI support. Ideal for analyzing job trends or automating job searches.
+
+> **Note:** Glassdoor is disabled — it returns HTTP 400 errors due to an unresolved upstream issue ([JobSpy#270](https://github.com/speedyapply/JobSpy/issues/270)).
 
 ## Features
 - Scrapes job postings using [JobSpy](https://github.com/speedyapply/JobSpy)
@@ -9,29 +11,32 @@ JobScrape is a Python wrapper for [JobSpy](https://github.com/speedyapply/JobSpy
 - Batch workloads can be run directly from the CLI
 
 ## Project Structure
-- [`environment.yml`](environment.yml:1): Conda environment dependencies
+- [`pyproject.toml`](pyproject.toml:1): Project metadata and dependencies (managed with [uv](https://docs.astral.sh/uv/))
 - [`keywords.txt`](keywords.txt:1): Template for job keywords and roles
 - [`main.py`](main.py:1): Main script for scraping jobs; configurable for titles, locations, and boards
 
 ## Setup
-1. Install [Conda](https://docs.conda.io/en/latest/).
-2. Create and activate the environment:
+1. Install [uv](https://docs.astral.sh/uv/getting-started/installation/).
+2. Create the environment and install dependencies:
 
 ```bash
-conda env create -f environment.yml
-conda activate jobspy-cli
+uv sync
 ```
 
+`uv` reads [`pyproject.toml`](pyproject.toml:1), downloads Python 3.12 if needed, and creates a `.venv/` with the pinned dependencies from `uv.lock`.
+
 ## Usage
+Prefix commands with `uv run` to use the project environment (no manual activation needed):
+
 ```bash
 # Show all arguments
-python ./main.py --help
+uv run python ./main.py --help
 # Basic search
-python ./main.py --job "Data Scientist" --location "Australia"
+uv run python ./main.py --job "Data Scientist" --location "Australia"
 # Multiple jobs and locations
-python ./main.py --job "Data Scientist" "ML Engineer" --location "Australia" "Vietnam" --results_wanted 10 --verbose 1
+uv run python ./main.py --job "Data Scientist" "ML Engineer" --location "Australia" "Vietnam" --results_wanted 10 --verbose 1
 # Load job keywords from file
-python ./main.py --job "./keywords.txt" --location "Australia" "Vietnam" --save_path ./jobs_by_keywords.csv --results_wanted 10 --verbose 1
+uv run python ./main.py --job "./keywords.txt" --location "Australia" "Vietnam" --save_path ./jobs_by_keywords.csv --results_wanted 10 --verbose 1
 ```
 Results are saved to `./jobs.csv` by default, including fields such as title, company, location, date posted, salary, job URL, and more.
 
