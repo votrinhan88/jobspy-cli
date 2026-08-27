@@ -42,7 +42,7 @@ class JobScraper:
         job: str|list[str],
         location: str|list[str],
         results_wanted: int = 10,
-        site_name: list = ["linkedin", "zip_recruiter", "indeed", "glassdoor", "google"],
+        site_name: list = ["linkedin", "zip_recruiter", "indeed", "google"],  # "glassdoor" returns 400; blocked upstream (speedyapply/JobSpy#270)
         **kwargs,
     ) -> pd.DataFrame:
         """Scrape job postings from multiple job sites for given job titles and locations.
@@ -113,17 +113,20 @@ class JobScraper:
         return df
 
     def clean_job_list(self, df: pd.DataFrame) -> pd.DataFrame:
-        # Drop some unnecessary columns
+        if df.empty:
+            return df
         df = df.drop(columns=self.BLACKLIST, errors="ignore")
-        # Move the self.whitelisted columns to the front
-        df = df[self.WHITELIST + [col for col in df.columns if col not in self.WHITELIST]]
+        present = [col for col in self.WHITELIST if col in df.columns]
+        df = df[present + [col for col in df.columns if col not in present]]
         return df
     
     def merge(self, all_jobs: list[pd.DataFrame]) -> pd.DataFrame:
-        # Merge duplicate jobs (e.g. from different sites) based on title, company, location, and date posted
         df = pd.concat(all_jobs, ignore_index=True)
+        if df.empty:
+            return df
         prev_len = len(df)
-        df = df.groupby(["title", "company", "location", "date_posted"], as_index=False).first()
+        groupby_cols = [c for c in ["title", "company", "location", "date_posted"] if c in df.columns]
+        df = df.groupby(groupby_cols, as_index=False).first()
         if self.verbose > 0:
             print(f"Remove duplicates: {prev_len} --> {len(df)} unique jobs")
         
@@ -173,7 +176,7 @@ if __name__ == "__main__":
     optional_group = parser.add_argument_group('Optional arguments')
     required_group.add_argument("--save_path", type=str, default="./jobs.csv", help="Path to save the resulting CSV file.")
     optional_group.add_argument("--results_wanted", type=int, default=10, help="Number of job results to fetch per (job, location) pair.")
-    optional_group.add_argument("--site_name", type=str, nargs='+', default=["linkedin", "zip_recruiter", "indeed", "glassdoor", "google"], help="List of job sites to scrape from.")
+    optional_group.add_argument("--site_name", type=str, nargs='+', default=["linkedin", "zip_recruiter", "indeed", "google"], help="List of job sites to scrape from.")
     optional_group.add_argument("--verbose", type=int, default=1, help="Verbosity level: 0 (errors only), 1 (errors + warnings), 2 (all logs)")
 
     auxiliary_group = parser.add_argument_group('Auxiliary arguments')
