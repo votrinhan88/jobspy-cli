@@ -4,59 +4,40 @@ import { useEffect, useRef, useState } from "react";
 import type { ScrapeConfig } from "@/lib/config";
 import type { ScrapeStatus } from "@/lib/scrape-status";
 
-const SITES = ["linkedin", "indeed", "google", "zip_recruiter"] as const;
+const SITES: { id: string; label: string; blocked?: string }[] = [
+  { id: "linkedin",      label: "LinkedIn" },
+  { id: "indeed",        label: "Indeed" },
+  { id: "google",        label: "Google Jobs" },
+  { id: "zip_recruiter", label: "ZipRecruiter" },
+  { id: "glassdoor",     label: "Glassdoor", blocked: "Blocked upstream — HTTP 400 from JobSpy (speedyapply/JobSpy#270)" },
+];
 
-function TagInput({
+function LinesInput({
   label,
   values,
   onChange,
+  placeholder,
 }: {
   label: string;
   values: string[];
   onChange: (v: string[]) => void;
+  placeholder?: string;
 }) {
-  const [draft, setDraft] = useState("");
-
-  function add() {
-    const val = draft.trim();
-    if (val && !values.includes(val)) onChange([...values, val]);
-    setDraft("");
-  }
-
-  function remove(v: string) {
-    onChange(values.filter((x) => x !== v));
+  function handleChange(raw: string) {
+    const lines = raw.split("\n").map((l) => l.trim()).filter(Boolean);
+    onChange(lines);
   }
 
   return (
     <div className="form-field">
       <label className="form-label">{label}</label>
-      <div className="tag-input-wrap">
-        {values.map((v) => (
-          <span key={v} className="tag">
-            {v}
-            <button
-              type="button"
-              className="tag-remove"
-              onClick={() => remove(v)}
-              aria-label={`Remove ${v}`}
-            >
-              ×
-            </button>
-          </span>
-        ))}
-        <input
-          className="tag-input-field"
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === ",") {
-              e.preventDefault();
-              add();
-            }
-          }}
-          placeholder="Type and press Enter"
-        />
-      </div>
+      <textarea
+        className="input input--textarea"
+        rows={4}
+        value={values.join("\n")}
+        onChange={(e) => handleChange(e.target.value)}
+        placeholder={placeholder ?? "One per line"}
+      />
     </div>
   );
 }
@@ -79,8 +60,7 @@ function StatusBanner({ status }: { status: ScrapeStatus | null }) {
         {status.updated_jobs ?? 0} updated &middot; {status.total_jobs ?? 0} total
         {status.finished_at && (
           <span className="status-ts">
-            {" "}
-            &mdash; finished {new Date(status.finished_at).toLocaleTimeString()}
+            {" "}&mdash; finished {new Date(status.finished_at).toLocaleTimeString()}
           </span>
         )}
       </div>
@@ -120,12 +100,10 @@ export default function ScrapePage() {
       fetch("/api/scrape/config"),
       fetch("/api/scrape/status"),
     ]);
-
     if (cfgRes.status === 400 || stRes.status === 400) {
       setNoProfile(true);
       return;
     }
-
     if (cfgRes.ok) setConfig(await cfgRes.json());
     if (stRes.ok) {
       const st: ScrapeStatus = await stRes.json();
@@ -180,7 +158,11 @@ export default function ScrapePage() {
       setRunning(false);
       return;
     }
-    setStatus((s) => ({ ...(s ?? emptyStatus()), status: "running", started_at: new Date().toISOString() }));
+    setStatus((s) => ({
+      ...(s ?? emptyStatus()),
+      status: "running",
+      started_at: new Date().toISOString(),
+    }));
     startPolling();
   }
 
@@ -239,15 +221,17 @@ export default function ScrapePage() {
       {runError && <div className="alert alert-error">{runError}</div>}
 
       <div className="form-grid">
-        <TagInput
+        <LinesInput
           label="Job titles"
           values={config.job}
           onChange={(v) => updateConfig({ job: v })}
+          placeholder={"AI Engineer\nML Engineer\nData Scientist"}
         />
-        <TagInput
+        <LinesInput
           label="Locations"
           values={config.location}
           onChange={(v) => updateConfig({ location: v })}
+          placeholder={"Australia\nVietnam\nRemote"}
         />
 
         <div className="form-field">
@@ -264,50 +248,45 @@ export default function ScrapePage() {
           />
         </div>
 
-        <div className="form-field">
-          <label className="form-label">Workers</label>
-          <input
-            className="input input--sm"
-            type="number"
-            min={1}
-            max={8}
-            value={config.workers}
-            onChange={(e) =>
-              updateConfig({ workers: parseInt(e.target.value) || 4 })
-            }
-          />
-        </div>
-
         <div className="form-field form-field--full">
           <label className="form-label">Job sites</label>
           <div className="checkbox-group">
             {SITES.map((site) => (
-              <label key={site} className="checkbox-label">
+              <label
+                key={site.id}
+                className={`checkbox-label${site.blocked ? " checkbox-label--blocked" : ""}`}
+                title={site.blocked}
+              >
                 <input
                   type="checkbox"
-                  checked={config.site_name.includes(site)}
+                  checked={config.site_name.includes(site.id)}
+                  disabled={!!site.blocked}
                   onChange={(e) => {
+                    if (site.blocked) return;
                     const next = e.target.checked
-                      ? [...config.site_name, site]
-                      : config.site_name.filter((s) => s !== site);
+                      ? [...config.site_name, site.id]
+                      : config.site_name.filter((s) => s !== site.id);
                     updateConfig({ site_name: next });
                   }}
                 />
-                {site}
+                {site.label}
+                {site.blocked && <span className="blocked-badge">blocked</span>}
               </label>
             ))}
           </div>
         </div>
 
-        <TagInput
+        <LinesInput
           label="Exclude titles containing"
           values={config.title_exclude}
           onChange={(v) => updateConfig({ title_exclude: v })}
+          placeholder={"Senior\nManager\nDirector"}
         />
-        <TagInput
+        <LinesInput
           label="Exclude companies"
           values={config.exclude_companies}
           onChange={(v) => updateConfig({ exclude_companies: v })}
+          placeholder={"Acme Corp\nRecruitment Agency"}
         />
       </div>
     </div>

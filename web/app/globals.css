@@ -527,6 +527,14 @@ body {
   flex: none;
 }
 
+.input--textarea {
+  resize: vertical;
+  min-height: 96px;
+  max-width: 100%;
+  line-height: 1.6;
+  font-family: var(--app-font);
+}
+
 /* ── Button variant ─────────────────────────────────────────────────────── */
 
 .btn-sm {
@@ -841,6 +849,23 @@ body {
   font-size: 13px;
   color: var(--app-ink);
   cursor: pointer;
+}
+
+.checkbox-label--blocked {
+  color: var(--app-ink-muted);
+  cursor: default;
+}
+
+.blocked-badge {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--app-error-text) 12%, transparent);
+  color: var(--app-error-text);
+  border: 1px solid color-mix(in srgb, var(--app-error-text) 20%, transparent);
 }
 
 /* ── View toggle ────────────────────────────────────────────────────────── */
