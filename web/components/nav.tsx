@@ -5,10 +5,11 @@ import { usePathname } from "next/navigation";
 
 const NAV_ITEMS = [
   { label: "Profile", href: "/profile" },
+  { label: "Resume", href: "/resume" },
   { label: "Scrape", href: "/scrape" },
   { label: "Jobs", href: "/jobs" },
   { label: "Applications", href: "/applications" },
-  { label: "Resume", href: "/resume" },
+  { label: "Statistics", href: "/statistics" },
 ];
 
 interface NavProps {
