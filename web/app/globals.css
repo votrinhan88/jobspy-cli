@@ -189,6 +189,11 @@ body {
   margin: 0;
 }
 
+/* Hide Next.js dev tools badge */
+nextjs-portal {
+  display: none;
+}
+
 * {
   scrollbar-width: thin;
   scrollbar-color: var(--app-border) transparent;
