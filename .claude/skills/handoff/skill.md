@@ -1,6 +1,6 @@
 ## What it does
 
-`handoff` compacts the conversation you are in into a **handoff document**: one markdown file, written to your OS's temporary directory rather than into the workspace, that a fresh agent can read to pick the work up.
+`handoff` compacts the conversation you are in into a **handoff document**: one markdown file written to `.claude/HANDOFF.md` in the project root, committed alongside the code so a fresh agent can read it to pick the work up.
 
 What it buys is **portability**, not compression. That makes the skill narrower than it sounds. You need a file only when the work has to *travel*: to a new harness, a new directory, a colleague, or a side task you want to fork off. If nothing is travelling, you do not need a handoff: staying in the session, `/clear`, a subagent and `/compact` cover the ordinary end-of-phase case, and `/compact` covers it more often than this skill does.
 
@@ -37,13 +37,10 @@ What it deliberately does not carry is anything already written down. Specs, pla
 `/compact` unless something is travelling. `/handoff`'s advantage is not that it summarises better; it's that the result is a file you can carry somewhere `/compact` can't reach.
 
 **Where did my handoff file go?**
-The temp directory. Ask for the path back and keep it before you move on. Temp is deliberate: a handoff is a transit document, not an artifact you maintain.
-
-**My handoff vanished between sessions.**
-Some environments clear temp between sessions. If the next session isn't starting within the hour, copy the file somewhere durable yourself as soon as it's written.
+`.claude/HANDOFF.md` in the project root. It is committed with the code and survives across sessions, machines, and harnesses.
 
 **How do I actually hand it to the next agent?**
-Open the fresh session and point it at the path: read this file, then continue. Point at the file rather than pasting the summary into a shell command — a summary containing backticks or `$(...)` gets mangled when interpolated, and the usual failure is silent truncation.
+Open the fresh session and say: "Read `.claude/HANDOFF.md`, then continue." The file is already in the repo — no path needed.
 
 **When does something belong in `CLAUDE.md` instead?**
 Ask whether it's true next month. `CLAUDE.md` is standing context about the project. A handoff is about one piece of work in flight and is dead once that work lands. Facts that keep getting re-explained are a `CLAUDE.md` problem; a half-finished task is a handoff.
@@ -56,6 +53,7 @@ Two things help. Pass the argument (tell it what the next session is for) so the
 - The document is a small fraction of the conversation, and specs, issues, and diffs appear as paths and URLs rather than copied text.
 - You can read it cold, without the original session open, and know what to do next.
 - The fresh agent starts working instead of asking you to re-explain the setup.
+- The file lives at `.claude/HANDOFF.md` and is committed with the code.
 - In the fork case, your original session is still sitting there untouched when you come back to it.
 - The suggested-skills section names the skill you'd have reached for yourself.
 - Nothing in it is a key, a token, or a password.
