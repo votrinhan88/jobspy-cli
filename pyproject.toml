@@ -1,0 +1,19 @@
+[project]
+name = "jobspy-cli"
+version = "0.1.0"
+description = "A Python wrapper for JobSpy to scrape job postings from multiple boards with CLI support"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "python-jobspy>=1.1.82",
+    "geopy>=2.4.1",
+    "pandas>=2.0",
+]
+
+[dependency-groups]
+dev = [
+    "ipykernel",
+]
+
+[tool.uv]
+package = false

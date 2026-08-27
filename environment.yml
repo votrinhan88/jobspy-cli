@@ -1,8 +1,0 @@
-name: jobspy-cli
-dependencies:
-  - python=3.12
-  - ipykernel
-  - pip
-  - pip:
-      - python-jobspy >= 1.1.82
-      - geopy >= 2.4.1
