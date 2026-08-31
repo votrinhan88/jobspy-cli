@@ -1,40 +1,38 @@
-# Handoff — jobspy-cli web app (session 2 wrap-up)
+# Handoff — jobspy-cli web app (session 3 wrap-up)
 
-**Date:** 2026-08-27  
-**Repo:** `c:\Users\votrinhan88\Desktop\jobspy-cli`  
-**Branch:** `main`  
-**Next session goal:** Continue feature work — Statistics page, or Jobs/Applications polish.
+**Date:** 2026-08-27
+**Repo:** `c:\Users\votri\Desktop\jobspy-cli`
+**Branch:** `main`
+**Next session goal:** Continue feature work — Jobs/Applications polish, or the planned AI features (Resume gap analysis, semantic search).
 
 ---
 
 ## What was done this session
 
-All changes committed as `cde9026`.
-
 | File | What changed |
 |------|-------------|
-| `web/app/profile/page.tsx` | Toast fixed overlay pill; `notifFading` fade-out; inline delete confirm; auto-switch on create; active-profile fallback on delete |
-| `web/app/api/profiles/[name]/route.ts` | DELETE auto-switches to next profile or clears cookie; returns `{ name, newActive }` |
-| `web/components/nav.tsx` | Active profile chip inline on Profile nav row (right-aligned); sidebar footer removed |
-| `web/app/globals.css` | Toast → fixed pill; sidebar 180 px; `.btn-danger`; `.sidebar-link` flex |
-| `.claude/SPEC.md` | UI Conventions section added; Profile page and DELETE route documented |
-| `.claude/skills/handoff/skill.md` | Updated output path to `.claude/HANDOFF.md` |
+| `web/app/statistics/page.tsx` | Replaced stub. Summary cards (total/active/remote/archived), pipeline funnel, weekly timeline, top companies/locations. Reads `GET /api/jobs`. |
+| `web/lib/statistics.ts` | Pure `computeStatistics()` helper plus `STATUS_ORDER`, timeline week grouping, top-count helpers. Dependency-free, UI-agnostic. |
+| `web/app/globals.css` | `.stat-grid`, `.stat-card`, `.funnel*`, `.timeline*`, `.top-*` styles; responsive collapse below 720 px. |
+| `data/sample/` | Sample profile (jobs.csv + scrape_config.json) added for manual testing only. Safe to delete. |
+| `.claude/SPEC.md` | Statistics page documented in the Pages section. |
 
----
+## Verification
+
+- `uv run pytest` — 65 passed.
+- `cd web && pnpm build` — green (statistics route included).
+- `pnpm lint` — advisory; 4 pre-existing errors from the `useEffect`+`load()` pattern already present in jobs/applications/resume pages, not new. New code uses the same established pattern.
+- Dev-server smoke test with the `sample` profile cookie: `/api/jobs` returns rows and `/statistics` returns 200.
 
 ## Decisions made
 
-Durable decisions now live in `.claude/DESIGN-DECISIONS.md`. Do not re-record them here; handoffs rotate and would lose them.
-
----
+Durable decisions live in `.claude/DESIGN-DECISIONS.md`. No new durable decisions this session beyond the page itself; the statistics design (cards + funnel + weekly timeline) is documented in `.claude/SPEC.md`.
 
 ## How to pick up
 
 1. Run `cd web && pnpm dev`.
 2. Read `.claude/SPEC.md` for all current decisions.
-3. Next: Statistics page (`web/app/statistics/page.tsx` is a stub), or Jobs/Applications UX polish.
-
----
+3. Next: Jobs/Applications UX polish, or the planned AI features — Resume page gap analysis (feature 6), then semantic search (feature 9).
 
 ## Suggested skills
 

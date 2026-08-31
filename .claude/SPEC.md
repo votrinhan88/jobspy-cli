@@ -154,6 +154,17 @@ Written by the Python subprocess. Read by the web app via polling.
 - Multiple views: table, kanban (grouped by status), Gantt chart (status transitions over time), statistics.
 - Status transitions are made from this page.
 
+### Statistics
+
+**Function:** Show pipeline stats and a status-change timeline for the active profile.
+
+- Reads all rows in `jobs.csv` for the active profile via `GET /api/jobs`.
+- Summary cards: total jobs, active (non-empty status), remote, archived (rejected + skipped).
+- Pipeline funnel: count per status with a color bar scaled to the largest status count.
+- Timeline: status-change activity grouped by week (Monday-based) from `status_updated_at`, for rows with a non-empty status, scaled to the busiest week.
+- Breakdown: top companies and top locations by count.
+- Pure stats computation lives in `web/lib/statistics.ts` (`computeStatistics`) so it is testable without the UI.
+
 ### Resume
 
 **Function:** Manage the CV for the active profile.
