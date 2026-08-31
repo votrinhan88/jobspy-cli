@@ -1,40 +1,124 @@
-# Handoff — jobspy-cli web app (session 3 wrap-up)
+# Handoff — jobspy-cli 10-feature plan (session 5 wrap-up)
 
-**Date:** 2026-08-27
-**Repo:** `c:\Users\votri\Desktop\jobspy-cli`
+**Date:** 2026-09-01
 **Branch:** `main`
-**Next session goal:** Continue feature work — Jobs/Applications polish, or the planned AI features (Resume gap analysis, semantic search).
+**Status:** Steps 1–6 complete. Step 7 rejected (model lock-in). Steps 8–9 skipped. Step 10 (scheduler) blocked on permission.
 
 ---
 
-## What was done this session
+## What was completed
 
-| File | What changed |
-|------|-------------|
-| `web/app/statistics/page.tsx` | Replaced stub. Summary cards (total/active/remote/archived), pipeline funnel, weekly timeline, top companies/locations. Reads `GET /api/jobs`. |
-| `web/lib/statistics.ts` | Pure `computeStatistics()` helper plus `STATUS_ORDER`, timeline week grouping, top-count helpers. Dependency-free, UI-agnostic. |
-| `web/app/globals.css` | `.stat-grid`, `.stat-card`, `.funnel*`, `.timeline*`, `.top-*` styles; responsive collapse below 720 px. |
-| `data/sample/` | Sample profile (jobs.csv + scrape_config.json) added for manual testing only. Safe to delete. |
-| `.claude/SPEC.md` | Statistics page documented in the Pages section. |
+**All of Steps 1–6** fully implemented and verified:
 
-## Verification
+| Step | Feature | Status |
+|------|---------|--------|
+| 1 | Scrape status counts (parse log) | ✅ Done |
+| 2 | CV file serving (`/api/resume/file`) | ✅ Done |
+| 3 | Job detail drawer (right panel) | ✅ Done |
+| 4 | Export CSV (`/api/jobs/export`) | ✅ Done |
+| 5 | Scrape history (20-run table) | ✅ Done |
+| 6 | Keywords.txt import button | ✅ Done |
+| 7 | Gap analysis (Claude API) | ❌ Rejected |
+| 8 | Job scoring | ⊘ Skipped |
+| 9 | Semantic job search | ⊘ Skipped (see research below) |
+| 10 | Scrape scheduler | ⧗ Blocked |
 
-- `uv run pytest` — 65 passed.
-- `cd web && pnpm build` — green (statistics route included).
-- `pnpm lint` — advisory; 4 pre-existing errors from the `useEffect`+`load()` pattern already present in jobs/applications/resume pages, not new. New code uses the same established pattern.
-- Dev-server smoke test with the `sample` profile cookie: `/api/jobs` returns rows and `/statistics` returns 200.
+All 65 Python tests pass. `pnpm build` is clean.
 
-## Decisions made
+---
 
-Durable decisions live in `.claude/DESIGN-DECISIONS.md`. No new durable decisions this session beyond the page itself; the statistics design (cards + funnel + weekly timeline) is documented in `.claude/SPEC.md`.
+## Why Steps 7–9 Were Skipped
 
-## How to pick up
+User directive: "I don't want to be locked in a single model."
 
-1. Run `cd web && pnpm dev`.
-2. Read `.claude/SPEC.md` for all current decisions.
-3. Next: Jobs/Applications UX polish, or the planned AI features — Resume page gap analysis (feature 6), then semantic search (feature 9).
+- **Step 7 (Gap analysis)** required hardcoding `ANTHROPIC_API_KEY` and committing to Claude Haiku. Rejected.
+- **Step 8 & 9** depend on Step 7 → skipped in sequence.
 
-## Suggested skills
+---
 
-- `.claude/skills/design/SKILL.md` — new page layout work
-- `.claude/skills/asd-ste100/skill.md` — always-on for all text output
+## Research: Semantic Search Alternative
+
+**Instead of Claude:** Use local `sentence-transformers` + `multi-qa-MiniLM-L6-cos-v1`.
+
+**Why this model:**
+- **Purpose:** Asymmetric search (short query → long passages). Perfect for job search.
+- **Performance:** ~5–15 ms per query after embedding cache.
+- **Cost:** Zero. Fully local. MIT license.
+- **Size:** 80 MB, 384-dim.
+
+**Implementation pattern:**
+1. Add `sentence-transformers` to Python via `uv add`.
+2. Create `search.py` CLI (mirroring `scraper.py` + `main.py` pattern).
+   - Encodes `jobs.csv` once to `data/{profile}/job_embeddings.npz`.
+   - On query: encode query string, cosine-rank, emit `jobId[]` JSON.
+3. Next.js route `web/app/api/jobs/search/route.ts` spawns subprocess (same `run/route.ts` pattern).
+4. Jobs page: search bar toggles text filter (instant) ↔ semantic search (Enter/button).
+
+**Zero API calls. Zero credentials. No model lock-in.**
+
+---
+
+## Current Task: Step 10 — Scrape Scheduler
+
+### What It Does
+
+Schedule scrapes via cron (e.g., daily 8 AM). Schedule stored in `scrape_config.json` as `schedule: string | null`.
+
+### Blocked On
+
+Permission to run in `web/`:
+```bash
+pnpm add node-cron
+pnpm add -D @types/node-cron
+```
+
+### Files to Create/Modify
+
+| File | Action |
+|------|--------|
+| `web/lib/config.ts` | Add `schedule: string \| null` field |
+| `web/lib/scheduler.ts` | Create: `Map<profile, CronJob>` registry |
+| `web/instrumentation.ts` | Create: Next.js startup hook |
+| `web/app/api/scrape/config` (PUT) | Re-register cron on schedule change |
+| `web/app/scrape/page.tsx` | Schedule selector UI (Off / 8 AM / midnight / Monday / Custom) |
+| `web/app/globals.css` | Schedule control styles |
+
+### Todo Checklist
+
+```
+[in_progress] Install node-cron + types
+[pending] Add schedule field to ScrapeConfig
+[pending] Create scheduler.ts registry
+[pending] Create instrumentation.ts hook
+[pending] Wire PUT route to re-register
+[pending] Add schedule UI to scrape page
+[pending] pnpm build green
+```
+
+---
+
+## Key References
+
+- **Plan:** `.claude/plans/all-of-them-sequentially-lexical-whistle.md` (all 10 steps)
+- **Spec:** `.claude/SPEC.md` (architecture, API routes, data model)
+- **Design log:** `.claude/DESIGN-DECISIONS.md` (append-only decisions)
+- **Recent commits:** `b972f6a` (stats page) … `8ee4bbe` (toast inline)
+
+---
+
+## How to Pick Up
+
+**Next session:**
+1. Request permission for `pnpm add node-cron @types/node-cron`.
+2. Follow Step 10 checklist (config.ts → scheduler.ts → instrumentation.ts → wire PUT → UI).
+3. Verify with `pnpm build` and smoke test schedule on dev server.
+4. If bandwidth: scope out Step 9 (semantic search via sentence-transformers).
+
+**Principle:** No hard dependency on a single API provider. Embeddings should be pluggable (SBERT, Hugging Face, OpenAI Embedding, transformers.js).
+
+---
+
+## Suggested Skills
+
+- `asd-ste100` — always-on for all text output
+- `test-driven-development` — when implementing Step 10 / Step 9
