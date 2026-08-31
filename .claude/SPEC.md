@@ -65,6 +65,9 @@ jobspy-cli/
 | `scrape_config.json` | Default scrape parameters for this profile |
 | `cv.pdf` / `cv.md` | CV file uploaded by the user |
 | `scrape_status.json` | Scrape run status, written by the Python subprocess |
+| `scrape.log` | stdout/stderr of the most recent scrape subprocess; reset on each run |
+
+`data/.geocache.json` lives at the `data/` root (shared across all profiles) and caches Nominatim geocoding results by raw location string.
 
 ---
 
@@ -193,7 +196,8 @@ Written by the Python subprocess. Read by the web app via polling.
 | `GET` | `/api/jobs` | Read `jobs.csv` for active profile |
 | `PATCH` | `/api/jobs/[jobId]` | Update `status` and `status_updated_at` for one row |
 | `GET` | `/api/scrape/status` | Read `scrape_status.json` |
-| `POST` | `/api/scrape/run` | Spawn Python subprocess, write initial `scrape_status.json` |
+| `POST` | `/api/scrape/run` | Spawn Python subprocess, reset `scrape.log`, write initial `scrape_status.json` |
+| `GET` | `/api/scrape/log` | Read `scrape.log` for the active profile (plain text) |
 | `GET` | `/api/scrape/config` | Read `scrape_config.json` |
 | `PUT` | `/api/scrape/config` | Write `scrape_config.json` |
 | `GET` | `/api/resume` | Read CV file metadata |
@@ -208,9 +212,9 @@ Written by the Python subprocess. Read by the web app via polling.
 ## Scrape Trigger Flow
 
 1. User clicks "Run scrape" on the Scrape page.
-2. `POST /api/scrape/run` writes `scrape_status.json` with `status: running`, then spawns `uv run python main.py` with args from `scrape_config.json` plus `--save_path data/{profile}/jobs.csv`.
-3. Python subprocess runs. On exit: API route writes `status: done` (or `error`) with counts.
-4. Frontend polls `GET /api/scrape/status` every 5 seconds. Updates progress indicator.
+2. `POST /api/scrape/run` resets `scrape.log`, writes `scrape_status.json` with `status: running`, then spawns `uv run python main.py` with args from `scrape_config.json` plus `--save_path data/{profile}/jobs.csv`. All multi-value args (`--job`, `--location`, `--site_name`, etc.) are passed as a single flag with space-separated values so argparse `nargs='+'` collects them all. `PYTHONUNBUFFERED=1` is set so Python flushes output line-by-line. stdout and stderr are redirected to `scrape.log` via a file descriptor (not piped through Node) so logging works with `detached: true`.
+3. Python subprocess runs. On exit: API route writes `status: done` (or `error`).
+4. Frontend polls `GET /api/scrape/status` every 5 seconds. Updates progress indicator. A collapsible log panel polls `GET /api/scrape/log` every 3 seconds while running.
 5. On `done`: frontend shows diff summary. Polling stops.
 
 Concurrent runs against the same profile are blocked — "Run scrape" button is disabled while `scrape_status.json` reports `running`.
@@ -226,6 +230,8 @@ Concurrent runs against the same profile are blocked — "Run scrape" button is 
 **Sidebar** — 180 px, sentence case. Nav order: Profile, Resume, Scrape, Jobs, Applications, Statistics. Active profile chip inline on the Profile row (right-aligned); no footer chip.
 
 **Scrape config** — multi-line fields are `<textarea>` (10 rows, no resize). Auto-saved debounced 600 ms; flushed immediately on blur. Glassdoor shown but blocked with a tooltip badge.
+
+**Scrape log** — collapsible `<details>` spoiler on the Scrape page, below the status banner. Loads last log on mount. Polls every 3 s while a run is active; does a final fetch on completion. Auto-scrolls to the bottom as lines arrive.
 
 ---
 

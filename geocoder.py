@@ -8,7 +8,7 @@ from geopy.geocoders import Nominatim
 
 
 class Geocoder:
-    GEOCACHE_PATH = os.path.join(os.path.dirname(__file__), ".geocache.json")
+    GEOCACHE_PATH = os.path.join(os.path.dirname(__file__), "data", ".geocache.json")
     _RATE_LIMIT = 1.0  # seconds between Nominatim requests (ToS: 1 req/sec)
     _MAX_WORKERS = 4
 

@@ -42,6 +42,14 @@ export function scrapeStatusPath(profile: string): string {
   return path.join(DATA_DIR, profile, "scrape_status.json");
 }
 
+export function scrapeLogPath(profile: string): string {
+  return path.join(DATA_DIR, profile, "scrape.log");
+}
+
+export function scrapeHistoryPath(profile: string): string {
+  return path.join(DATA_DIR, profile, "scrape_history.json");
+}
+
 export function cvPath(profile: string, ext: "pdf" | "md" = "pdf"): string {
   return path.join(DATA_DIR, profile, `cv.${ext}`);
 }

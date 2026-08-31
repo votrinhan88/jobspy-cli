@@ -1,5 +1,5 @@
 import fs from "fs/promises";
-import { scrapeStatusPath } from "./profile";
+import { scrapeStatusPath, scrapeHistoryPath } from "./profile";
 
 export type ScrapeStatusValue = "idle" | "running" | "done" | "error";
 
@@ -40,6 +40,27 @@ export async function writeScrapeStatus(
   await fs.writeFile(
     scrapeStatusPath(profile),
     JSON.stringify({ ...current, ...status }, null, 2),
+    "utf-8"
+  );
+}
+
+const HISTORY_MAX = 20;
+
+export async function readScrapeHistory(profile: string): Promise<ScrapeStatus[]> {
+  try {
+    const raw = await fs.readFile(scrapeHistoryPath(profile), "utf-8");
+    return JSON.parse(raw);
+  } catch {
+    return [];
+  }
+}
+
+export async function appendScrapeHistory(profile: string, entry: ScrapeStatus): Promise<void> {
+  const history = await readScrapeHistory(profile);
+  history.unshift(entry);
+  await fs.writeFile(
+    scrapeHistoryPath(profile),
+    JSON.stringify(history.slice(0, HISTORY_MAX), null, 2),
     "utf-8"
   );
 }

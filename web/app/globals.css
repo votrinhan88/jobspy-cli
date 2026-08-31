@@ -1532,3 +1532,259 @@ nextjs-portal {
     grid-template-columns: 1fr;
   }
 }
+
+/* ── Job detail drawer ──────────────────────────────────────────────────── */
+
+.drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.25);
+  z-index: 40;
+}
+
+.drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  height: 100%;
+  width: 400px;
+  max-width: 100vw;
+  background: var(--app-panel);
+  border-left: 1px solid var(--app-border);
+  z-index: 41;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.drawer-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 20px 20px 16px;
+  border-bottom: 1px solid var(--app-border);
+  flex-shrink: 0;
+}
+
+.drawer-title-link {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--app-ink);
+  text-decoration: none;
+  line-height: 1.4;
+  display: block;
+}
+
+.drawer-title-link:hover {
+  color: var(--app-accent);
+  text-decoration: underline;
+}
+
+.drawer-company {
+  font-size: 13px;
+  color: var(--app-ink-muted);
+  margin: 4px 0 0;
+}
+
+.drawer-close {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.drawer-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.drawer-field {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.drawer-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--app-ink-muted);
+  width: 68px;
+  flex-shrink: 0;
+}
+
+.salary-display {
+  font-family: var(--app-mono);
+  font-size: 13px;
+  color: var(--app-ink);
+}
+
+.drawer-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+  padding-top: 16px;
+  border-top: 1px solid var(--app-border);
+}
+
+.job-row--selected td {
+  background: color-mix(in srgb, var(--app-accent) 6%, var(--app-panel));
+}
+
+button.job-link {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+  font-family: var(--app-font);
+}
+
+/* ── Scrape progress bar ────────────────────────────────────────────────── */
+
+.scrape-progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.scrape-progress-bar-wrap {
+  flex: 1;
+  height: 6px;
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
+  border-radius: 99px;
+  overflow: hidden;
+}
+
+.scrape-progress-bar {
+  height: 100%;
+  background: var(--app-accent);
+  border-radius: 99px;
+  transition: width 0.4s ease;
+  min-width: 0;
+}
+
+.scrape-progress-label {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--app-ink-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* ── Scrape run history table ───────────────────────────────────────────── */
+
+.history-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.history-table th {
+  text-align: left;
+  padding: 8px 14px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--app-ink-muted);
+  background: var(--app-surface);
+  border-bottom: 1px solid var(--app-border);
+}
+
+.history-table td {
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--app-border);
+  color: var(--app-ink);
+}
+
+.history-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.history-table tbody tr:hover td {
+  background: var(--app-surface);
+}
+
+.history-ts {
+  font-size: 12px;
+  color: var(--app-ink-muted);
+}
+
+.history-duration {
+  font-family: var(--app-mono);
+  font-size: 12px;
+  color: var(--app-ink-muted);
+}
+
+/* ── Scrape log spoiler ─────────────────────────────────────────────────── */
+
+.log-spoiler {
+  border: 1px solid var(--app-border);
+  border-radius: 6px;
+  overflow: hidden;
+  margin-bottom: 24px;
+}
+
+.log-spoiler summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--app-ink-muted);
+  background: var(--app-panel);
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+}
+
+.log-spoiler summary::-webkit-details-marker {
+  display: none;
+}
+
+.log-spoiler summary:hover {
+  color: var(--app-ink);
+}
+
+.log-spoiler[open] summary {
+  border-bottom: 1px solid var(--app-border);
+}
+
+.log-chevron {
+  display: inline-block;
+  font-style: normal;
+  font-size: 10px;
+  transition: transform 0.15s;
+  color: var(--app-ink-muted);
+}
+
+.log-spoiler[open] .log-chevron {
+  transform: rotate(90deg);
+}
+
+.log-body {
+  background: var(--app-surface);
+  padding: 12px 14px;
+  max-height: 320px;
+  overflow-y: auto;
+  overflow-x: auto;
+}
+
+.log-pre {
+  margin: 0;
+  font-family: var(--app-mono);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--app-ink);
+  white-space: pre-wrap;
+  word-break: break-all;
+}

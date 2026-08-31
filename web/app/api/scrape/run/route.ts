@@ -1,9 +1,10 @@
 import { spawn } from "child_process";
+import { openSync, closeSync, writeFileSync, readFileSync } from "fs";
 import path from "path";
 import type { NextRequest } from "next/server";
-import { getActiveProfile, profileDir } from "@/lib/profile";
+import { getActiveProfile, profileDir, scrapeLogPath } from "@/lib/profile";
 import { readConfig } from "@/lib/config";
-import { writeScrapeStatus, readScrapeStatus } from "@/lib/scrape-status";
+import { writeScrapeStatus, readScrapeStatus, appendScrapeHistory } from "@/lib/scrape-status";
 
 const REPO_ROOT = path.resolve(process.cwd(), "..");
 
@@ -23,6 +24,10 @@ export async function POST(_request: NextRequest) {
 
   const args = buildArgs(config, savePath);
 
+  const logPath = scrapeLogPath(profile);
+  writeFileSync(logPath, "");
+  const logFd = openSync(logPath, "a");
+
   await writeScrapeStatus(profile, {
     status: "running",
     started_at: new Date().toISOString(),
@@ -36,21 +41,22 @@ export async function POST(_request: NextRequest) {
   const child = spawn("uv", ["run", "python", "main.py", ...args], {
     cwd: REPO_ROOT,
     detached: true,
-    stdio: "ignore",
+    stdio: ["ignore", logFd, logFd],
+    env: { ...process.env, PYTHONUNBUFFERED: "1" },
   });
+
+  closeSync(logFd);
 
   child.on("close", async (code) => {
     if (code === 0) {
-      await writeScrapeStatus(profile, {
-        status: "done",
-        finished_at: new Date().toISOString(),
-      });
+      const counts = parseCountsFromLog(logPath);
+      const final = { status: "done" as const, finished_at: new Date().toISOString(), ...counts };
+      await writeScrapeStatus(profile, final);
+      await appendScrapeHistory(profile, await readScrapeStatus(profile));
     } else {
-      await writeScrapeStatus(profile, {
-        status: "error",
-        finished_at: new Date().toISOString(),
-        error: `Process exited with code ${code}`,
-      });
+      const final = { status: "error" as const, finished_at: new Date().toISOString(), error: `Process exited with code ${code}` };
+      await writeScrapeStatus(profile, final);
+      await appendScrapeHistory(profile, await readScrapeStatus(profile));
     }
   });
 
@@ -59,26 +65,25 @@ export async function POST(_request: NextRequest) {
   return Response.json({ status: "running" }, { status: 202 });
 }
 
+function parseCountsFromLog(logPath: string): { new_jobs: number | null; total_jobs: number | null } {
+  try {
+    const text = readFileSync(logPath, "utf-8");
+    const match = [...text.matchAll(/Appended:\s+(\d+)\s+new jobs?\s+\((\d+)\s+total\)/g)].pop();
+    if (match) return { new_jobs: parseInt(match[1]), total_jobs: parseInt(match[2]) };
+  } catch { /* log may not exist */ }
+  return { new_jobs: null, total_jobs: null };
+}
+
 function buildArgs(config: Awaited<ReturnType<typeof readConfig>>, savePath: string): string[] {
   const args: string[] = [];
 
-  for (const job of config.job) {
-    args.push("--job", job);
-  }
-  for (const loc of config.location) {
-    args.push("--location", loc);
-  }
+  args.push("--job", ...config.job);
+  args.push("--location", ...config.location);
   args.push("--results_wanted", String(config.results_wanted));
-  for (const site of config.site_name) {
-    args.push("--site_name", site);
-  }
+  args.push("--site_name", ...config.site_name);
   args.push("--workers", String(config.workers));
-  for (const exc of config.title_exclude) {
-    args.push("--title_exclude", exc);
-  }
-  for (const exc of config.exclude_companies) {
-    args.push("--exclude_companies", exc);
-  }
+  if (config.title_exclude.length > 0) args.push("--title_exclude", ...config.title_exclude);
+  if (config.exclude_companies.length > 0) args.push("--exclude_companies", ...config.exclude_companies);
   args.push("--save_path", savePath);
 
   return args;

@@ -81,6 +81,15 @@ export default function ResumePage() {
             {meta.size != null && (
               <span className="cv-size">{formatBytes(meta.size)}</span>
             )}
+            <a
+              href="/api/resume/file"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn btn-secondary btn-sm"
+              style={{ marginLeft: "auto" }}
+            >
+              View
+            </a>
           </div>
         ) : (
           <p className="empty-state">No CV uploaded yet.</p>

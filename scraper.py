@@ -163,7 +163,14 @@ class JobScraper:
     def _upsert(self, df: pd.DataFrame, save_path: str, overwrite: bool) -> pd.DataFrame:
         if overwrite or not os.path.exists(save_path):
             return df
-        existing = pd.read_csv(save_path)
+        try:
+            existing = pd.read_csv(save_path)
+        except (pd.errors.EmptyDataError, pd.errors.ParserError):
+            return df
+        if existing.empty:
+            return df
+        if df.empty:
+            return existing
         before = len(existing)
 
         if "job_url" in df.columns and "job_url" in existing.columns:
