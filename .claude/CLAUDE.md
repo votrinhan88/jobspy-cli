@@ -20,28 +20,63 @@ Always follow the instructions in `.claude/skills/test-driven-development/skill.
 - No comments that explain *what* the code does — only *why* when non-obvious
 - No emojis in code, comments, or output
 
+## Where Things Live
+
+- **Spec of record:** `.claude/SPEC.md` — single source of truth for architecture, data model, pages, and API routes. Update it when a decision changes; on conflict it overrides this prompt.
+- **Durable design decisions:** `.claude/DESIGN-DECISIONS.md` — append-only record of choices and their rationale.
+- **Session handoffs:** rotate `.claude/HANDOFF.md` each session — next-session context only. Never put durable decisions here (handoffs get overwritten).
+
+## Non-negotiables
+
+Engine invariants — do not break:
+
+- `_PRESERVE_ON_UPSERT` = `{status, status_updated_at, location, job_id}`. A new scrape must never overwrite these columns on an existing row.
+- `job_id` is immutable identity (md5 of `job_url`, slugified `company-title`). Changing it breaks application tracking. Preserved by upsert.
+- Upsert is incremental. `--overwrite` is the only wipe path.
+- No concurrent scrape runs against the same profile.
+- Flat files are the storage contract — no database, no authentication.
+
+## Definition of Done
+
+Before committing, all of:
+
+- Python suite green: `uv run pytest`
+- Web production build green: `cd web && pnpm build`
+- `cd web && pnpm lint` clean (advisory, not a hard gate)
+- Tests must not depend on live job boards, network calls, or the real `.geocache.json` — use inline synthetic inputs and temp paths (geocoder/scraper tests are pure functions over provided frames).
+
+## Command Quick-ref
+
+Python:
+
+- dev env: `uv sync`
+- tests: `uv run pytest`
+- CLI help: `uv run python ./main.py --help`
+- scrape: `uv run python ./main.py --job "..." --location "..." [--save_path ...]`
+
+Web:
+
+- dev: `cd web && pnpm dev`
+- build: `cd web && pnpm build`
+- lint: `cd web && pnpm lint`
+
 ## Stack
 
 **Python engine** (scraping)
+
 - Python 3.12, managed with `uv`
 - Key deps: `python-jobspy`, `geopy`, `pandas`
 - Dev deps: `pytest`, `pytest-mock`
 - Modules: `scraper.py` (JobScraper), `geocoder.py` (Geocoder), `main.py` (CLI)
 
 **Web app** (`web/`)
+
 - Next.js, TypeScript, App Router
 - shadcn/ui, Tailwind CSS
 - pnpm
 - Data: flat files under `data/{profile}/`
 
-## Available Commands
-
-- `uv run python ./main.py --help` — show all CLI arguments
-- `uv run pytest` — run test suite
-- `uv sync` — install/update dependencies
-- `cd web && pnpm dev` — start web app dev server
-
 ## Git Workflow
 
 - Conventional commits: `feat:`, `fix:`, `refactor:`, `docs:`
-- Branch off `main` for changes; do not push directly to `main`
+- Commit to `main` directly; keep each commit focused and green.

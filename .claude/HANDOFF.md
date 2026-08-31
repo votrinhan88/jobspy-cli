@@ -24,11 +24,7 @@ All changes committed as `cde9026`.
 
 ## Decisions made
 
-- **Toast** — `position: fixed` pill, no layout shift, spring-in, fade+sink out after 9 s, persisted across reload via `sessionStorage`.
-- **No `window.confirm`** — inline row confirmation for all destructive actions.
-- **Auto-switch on create** — creating a profile immediately activates it.
-- **Active-profile fallback on delete** — server picks next alphabetical profile or clears cookie; client reloads.
-- **Profile chip in nav** — inline on the Profile row, right-aligned.
+Durable decisions now live in `.claude/DESIGN-DECISIONS.md`. Do not re-record them here; handoffs rotate and would lose them.
 
 ---
 
