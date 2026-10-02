@@ -1,7 +1,7 @@
 # jobspy-cli — Web App Specification
 
 **Status:** Living document. Update this file when a decision changes.
-**Last updated:** 2026-08-27 (session 2)
+**Last updated:** 2026-10-02 (UX review fixes)
 
 ---
 
@@ -23,7 +23,8 @@ jobspy-cli/
 │       ├── jobs.csv
 │       ├── scrape_config.json
 │       ├── cv.pdf              # or .md
-│       └── scrape_status.json
+│       ├── scrape_status.json
+│       └── status_log.jsonl    # written by the web app only
 └── web/
     └── src/
         ├── app/
@@ -56,6 +57,9 @@ jobspy-cli/
 - A profile represents a job-search campaign — different target roles, locations, and CV.
 - The user creates profiles from the Profile page. There is no default profile created automatically.
 - Switching profile changes the active data directory for the entire session.
+- Cookie fallback: `getActiveProfile()` uses the cookie value only if it is a valid profile name (`[a-zA-Z0-9_-]{1,64}`) and the folder exists. Otherwise it uses the first profile in alphabetical order. If no profile exists, it returns `null`. It does not write the cookie.
+- Path safety: every path helper in `web/lib/profile.ts` throws for an invalid profile name and checks that the result is inside the data folder. `listProfiles()` lists only folders with a valid name.
+- The data folder is `JOBSPY_DATA_DIR` if set, else `../data` from `web/`. Tests use this to work in a temp folder.
 
 ### Profile directory contents
 
@@ -66,6 +70,7 @@ jobspy-cli/
 | `cv.pdf` / `cv.md` | CV file uploaded by the user |
 | `scrape_status.json` | Scrape run status, written by the Python subprocess |
 | `scrape.log` | stdout/stderr of the most recent scrape subprocess; reset on each run |
+| `status_log.jsonl` | Append-only history of status changes, one JSON object per line. Written by the web app. The engine does not read it. |
 
 `data/.geocache.json` lives at the `data/` root (shared across all profiles) and caches Nominatim geocoding results by raw location string.
 
@@ -85,13 +90,29 @@ All existing scraper columns plus:
 
 ### Status pipeline
 
-```
-(empty) → shortlisted → applied → interview → offer
-                                            → rejected
-                                            → skipped
+Pipeline order (used for sorting and display): `""` (new), `shortlisted`, `applied`, `interview`, `offer`, `rejected`, `skipped`.
+
+Statuses are free-flowing. Any status can move to any other status, including back to `""`. There is no transition table, no disabled move and no confirmation dialog. Undo is the safety net. The single source of truth is `web/lib/status.ts` (order, labels, `isActiveStatus`, `isArchivedStatus`, `isRemote`).
+
+- Active: `shortlisted`, `applied`, `interview`, `offer`.
+- Archived: `rejected`, `skipped`.
+- Remote: `is_remote` is `true`, `yes` or `1` (any case).
+
+Jobs enter the Applications page when `status` is non-empty. A job set back to `""` leaves Applications and shows as new on Jobs.
+
+### `status_log.jsonl` structure
+
+One line per successful status change, appended by `PATCH /api/jobs/[jobId]`. Undo also appends a line. Lines are never edited or removed.
+
+```json
+{"job_id": "acme-data-scientist-1a2b3c4d", "from": "shortlisted", "to": "applied", "at": "2026-09-12T08:30:00.000Z"}
 ```
 
-Jobs enter the Applications page when `status` is non-empty.
+`at` is the stored `status_updated_at`. When undo restores an empty timestamp, `at` is the time of the undo. Readers skip blank and corrupt lines. A missing file means no history. The status log is a side file so the CSV columns and the engine invariants do not change.
+
+### CSV read and write
+
+`web/lib/csv.ts` uses its own single-pass parser (RFC 4180 style): quoted fields with commas, newlines (LF and CRLF) and `""` escapes, CRLF row ends, a blank last line and a leading byte-order mark. Short rows are padded. `writeJobs` writes the union of all column names (order of first appearance), quotes fields that contain a comma, a quote, `\n` or `\r`, and writes atomically (temp file in the same folder, then rename). An empty job list leaves the file untouched.
 
 ### `scrape_config.json` structure
 
@@ -145,24 +166,28 @@ Written by the Python subprocess. Read by the web app via polling.
 
 **Function:** View all rows in `jobs.csv`, regardless of status.
 
-- Read-only table of all scraped jobs.
-- "Shortlist" button on each row sets `status = "shortlisted"` and `status_updated_at = now`.
-- Shortlisted jobs appear on the Applications page.
+- Table of all scraped jobs. Default sort: Posted, newest first. The Title, Company, Location, Posted and Status headers are sort buttons with `aria-sort`. Empty values sort last. Status sorts in pipeline order.
+- Status filter chips with counts: All, New, Shortlisted, Applied, Interview, Offer, Rejected, Skipped (toggle buttons with `aria-pressed`; several can be on). A "Remote only" toggle. Counts follow the search and the remote filter, not the status filter.
+- Search (labelled) matches title, company and location. Every word must match. The counter reads "{n} of {total} jobs".
+- New rows have "Shortlist" and "Skip". A skipped job stays in the list with its chip. Each change shows the undo toast.
+- The detail drawer is a modal dialog: `role="dialog"`, `aria-modal`, labelled by the job title. Focus moves into it and returns to the row on close. Tab stays inside. Escape, the close button and a backdrop click close it. It has Shortlist, Skip and the status menu.
+- Pure view logic lives in `web/lib/jobs-view.ts` (`sortJobs`, `filterJobs`, `statusCounts`).
 
 ### Applications
 
 **Function:** Monitor and manage jobs with a non-empty status.
 
-- Shows only rows where `status` is non-empty.
-- Multiple views: table, kanban (grouped by status), Gantt chart (status transitions over time), statistics.
-- Status transitions are made from this page.
+- Shows only rows where `status` is non-empty. The header shows "{n} active applications, {m} archived" (active and archived as defined in the status pipeline).
+- Views: Kanban, Table, Gantt. The toggle buttons use `aria-pressed`. The last view is kept in `localStorage` key `applications_view`.
+- Every card and table row has a status menu with all statuses plus "Back to new". The current status is marked. Cards also have one primary button for the usual next step (Mark applied, Move to interview, Got offer). No confirmation dialogs. Each change shows the undo toast.
+- Gantt: one row per job (title and company at the left), week ticks on the time axis, bars in the status colours. Each bar has a `title` and an accessible name such as "Applied, 12 Sep to 18 Sep". Rows sort by most recent activity. The chart scrolls inside its own container. Data comes from `GET /api/jobs/log` and `GET /api/jobs`, built by `buildGanttRows` in `web/lib/gantt.ts`. A log entry with an earlier time than the entries before it (an undo) removes the undone segments. A job with no log gets one segment from its `status_updated_at`.
 
 ### Statistics
 
 **Function:** Show pipeline stats and a status-change timeline for the active profile.
 
 - Reads all rows in `jobs.csv` for the active profile via `GET /api/jobs`.
-- Summary cards: total jobs, active (non-empty status), remote, archived (rejected + skipped).
+- Summary cards: total jobs, active (shortlisted + applied + interview + offer), remote (shared `isRemote`), archived (rejected + skipped).
 - Pipeline funnel: count per status with a color bar scaled to the largest status count.
 - Timeline: status-change activity grouped by week (Monday-based) from `status_updated_at`, for rows with a non-empty status, scaled to the busiest week.
 - Breakdown: top companies and top locations by count.
@@ -173,7 +198,6 @@ Written by the Python subprocess. Read by the web app via polling.
 **Function:** Manage the CV for the active profile.
 
 - Upload CV (PDF or Markdown). Replaces existing file at `data/{profile}/cv.pdf`.
-- Preview CV inline.
 
 ### Profile
 
@@ -182,7 +206,7 @@ Written by the Python subprocess. Read by the web app via polling.
 - List all profiles (directories under `data/`).
 - Create a new profile (creates directory + default `scrape_config.json`), then **immediately auto-switches** to it and reloads.
 - Switch active profile by clicking the row (no separate button).
-- Rename via pencil icon — implemented as create-new + delete-old (no filesystem rename API needed).
+- Rename via pencil icon — calls `PATCH /api/profiles/[name]`, which renames the folder with `fs.rename` and keeps every file. Save and Cancel are disabled until the call ends. On error the old name stays and an error toast shows. If the renamed profile was active, the page reloads so the nav chip shows the new name.
 - Delete via trash icon — shows an **inline confirmation** (no `window.confirm`): clicking trash reveals "Delete? / Yes / Cancel" in the row. On confirm, if the deleted profile was active, the server auto-switches to the next alphabetical profile or clears the cookie if none remain, and the client reloads.
 - Active profile is highlighted with an "Active" tag.
 - Active profile name is shown as a chip inline on the "Profile" nav row (right-aligned, pushed with `margin-left: auto`).
@@ -194,7 +218,8 @@ Written by the Python subprocess. Read by the web app via polling.
 | Method | Path | Function |
 |--------|------|---------|
 | `GET` | `/api/jobs` | Read `jobs.csv` for active profile |
-| `PATCH` | `/api/jobs/[jobId]` | Update `status` and `status_updated_at` for one row |
+| `PATCH` | `/api/jobs/[jobId]` | Body `{ status, status_updated_at? }`. Any status to any status, including `""`. `status_updated_at` is optional: an ISO 8601 date and time, or `""` (undo of a new job); absent means now; invalid gives 422. Unknown status gives 422, unknown job 404, no profile 400. Keeps other columns and row order. Appends one line to `status_log.jsonl`. Returns the updated row. |
+| `GET` | `/api/jobs/log` | Read `status_log.jsonl` for the active profile; returns a list of `{ job_id, from, to, at }` |
 | `GET` | `/api/scrape/status` | Read `scrape_status.json` |
 | `POST` | `/api/scrape/run` | Spawn Python subprocess, reset `scrape.log`, write initial `scrape_status.json` |
 | `GET` | `/api/scrape/log` | Read `scrape.log` for the active profile (plain text) |
@@ -205,6 +230,7 @@ Written by the Python subprocess. Read by the web app via polling.
 | `GET` | `/api/profiles` | List all profile directories; returns `{ profiles, active }` |
 | `POST` | `/api/profiles` | Create a new profile |
 | `POST` | `/api/profiles/switch` | Set active profile cookie |
+| `PATCH` | `/api/profiles/[name]` | Rename a profile. Body `{ name }`. 422 for an invalid old or new name, 404 if the old profile does not exist, 409 if the new name exists, 200 with no change for the same name. Uses `fs.rename`. Moves the cookie if the renamed profile was active. Returns `{ name, active }` |
 | `DELETE` | `/api/profiles/[name]` | Delete profile directory; if it was active, auto-switches to next profile or clears cookie; returns `{ name, newActive }` |
 
 ---
@@ -223,11 +249,21 @@ Concurrent runs against the same profile are blocked — "Run scrape" button is 
 
 ## UI Conventions
 
-**Toast** — fixed pill, bottom-center, floats above layout. Spring in, fade+sink out over 1 s after 9 s. Persisted across reload via `sessionStorage` key `profile_notif`.
+**Toast** — fixed pill, bottom-center, floats above layout. Spring in, fade+sink out over 1 s after 9 s. Persisted across reload via `sessionStorage` key `profile_notif`. (Profile page.)
+
+**Toast with undo** — `web/components/toast.tsx` (`ToastProvider`, `useToast`). Message, optional action button, close button, auto-dismiss after 8 s, inside an `aria-live="polite"` region. A new toast replaces the current one. Status changes use `useChangeStatus` (`web/components/use-change-status.ts`): it saves the previous `status` and `status_updated_at`, sends the PATCH, shows "Moved {title} to {status}." with Undo. Undo sends the previous values back.
+
+**Status menu** — `web/components/status-menu.tsx`. A menu button with `role="menu"` and `menuitemradio` items: all statuses plus "Back to new". Arrow keys, Home, End and Escape work. Focus returns to the button.
+
+**Focus ring** — 2 px solid accent colour with a 2 px offset on `:focus-visible` (inset inside clipping containers).
+
+**Mobile layout (768 px and below)** — the sidebar becomes a top bar with a "Menu" button (`aria-expanded`, `aria-controls`). The nav panel slides in and closes on Escape, link click and backdrop click; focus returns to the button. Jobs rows render as cards. Kanban columns are 260 px wide and scroll sideways with scroll snap. Tables and the Gantt chart scroll inside their own container. The drawer is full screen. Statistics cards stack in one column. Every pressable control is at least 44 by 44 px.
+
+**Content width** — all pages share one 1200 px container, so the left edge does not move between pages. Narrow pages keep their content at 796 px or less.
 
 **Dialogs** — no `window.confirm`. Destructive actions use inline confirmation in the same row: click → "Label? / Yes / Cancel".
 
-**Sidebar** — 180 px, sentence case. Nav order: Profile, Resume, Scrape, Jobs, Applications, Statistics. Active profile chip inline on the Profile row (right-aligned); no footer chip.
+**Sidebar** — 180 px above 768 px width, sentence case. Nav order: Profile, Resume, Scrape, Jobs, Applications, Statistics. Active profile chip inline on the Profile row (right-aligned); no footer chip.
 
 **Scrape config** — multi-line fields are `<textarea>` (10 rows, no resize). Auto-saved debounced 600 ms; flushed immediately on blur. Glassdoor shown but blocked with a tooltip badge.
 

@@ -1,124 +1,59 @@
-# Handoff — jobspy-cli 10-feature plan (session 5 wrap-up)
+# Handoff — onboarding, UX review, review fixes (session 6)
 
-**Date:** 2026-09-01
-**Branch:** `main`
-**Status:** Steps 1–6 complete. Step 7 rejected (model lock-in). Steps 8–9 skipped. Step 10 (scheduler) blocked on permission.
-
----
-
-## What was completed
-
-**All of Steps 1–6** fully implemented and verified:
-
-| Step | Feature | Status |
-|------|---------|--------|
-| 1 | Scrape status counts (parse log) | ✅ Done |
-| 2 | CV file serving (`/api/resume/file`) | ✅ Done |
-| 3 | Job detail drawer (right panel) | ✅ Done |
-| 4 | Export CSV (`/api/jobs/export`) | ✅ Done |
-| 5 | Scrape history (20-run table) | ✅ Done |
-| 6 | Keywords.txt import button | ✅ Done |
-| 7 | Gap analysis (Claude API) | ❌ Rejected |
-| 8 | Job scoring | ⊘ Skipped |
-| 9 | Semantic job search | ⊘ Skipped (see research below) |
-| 10 | Scrape scheduler | ⧗ Blocked |
-
-All 65 Python tests pass. `pnpm build` is clean.
+**Date:** 2026-10-02
+**Branch:** `main`. The fixes are committed in four commits after `fe6ede9` (see `git log`) and pushed to `origin/main`.
+**For the next session:** pick the next feature (see "Still open from before").
 
 ---
 
-## Why Steps 7–9 Were Skipped
+## What happened
 
-User directive: "I don't want to be locked in a single model."
+1. Set up a new Windows machine: Python env, web deps, tests, dev server.
+2. An Opus subagent reviewed the running app as a critical frontend developer: `.claude/report.md` (screenshots in `.claude/report-assets/`).
+3. The owner agreed on six findings. A plan with declared tests was written: `.claude/plans/review-fixes.md`.
+4. An Opus subagent implemented all phases test-first. Per-phase detail is in the plan, SPEC and DESIGN-DECISIONS. Do not repeat it here.
 
-- **Step 7 (Gap analysis)** required hardcoding `ANTHROPIC_API_KEY` and committing to Claude Haiku. Rejected.
-- **Step 8 & 9** depend on Step 7 → skipped in sequence.
+## Verified by me (rerun on 2026-10-02)
 
----
+- `cd web && pnpm test`: 90 pass. `uv run pytest`: 65 pass. `cd web && pnpm build`: passes.
+- `pnpm lint`: 2 errors and 4 warnings, all in files this work did not change (`app/resume/page.tsx`, `app/statistics/page.tsx` errors; `app/scrape/page.tsx`, `app/api/scrape/run/route.ts` x2, `app/layout.tsx` warnings).
+- Spot-checked in code: rename uses `fs.rename`; `getActiveProfile()` validates the cookie and falls back; no status transition table; no confirm dialogs.
 
-## Research: Semantic Search Alternative
+## NOT verified by me
 
-**Instead of Claude:** Use local `sentence-transformers` + `multi-qa-MiniLM-L6-cos-v1`.
+- Browser acceptance checks A1 to A6 (plan, last section). The developer reports they pass; screenshots are in `.claude/report-assets/fixes/`. I did not rerun them or look at the screenshots.
+- Real PDF upload, a real scrape, mobile on a real phone.
 
-**Why this model:**
-- **Purpose:** Asymmetric search (short query → long passages). Perfect for job search.
-- **Performance:** ~5–15 ms per query after embedding cache.
-- **Cost:** Zero. Fully local. MIT license.
-- **Size:** 80 MB, 384-dim.
+## Open decisions for the owner
 
-**Implementation pattern:**
-1. Add `sentence-transformers` to Python via `uv add`.
-2. Create `search.py` CLI (mirroring `scraper.py` + `main.py` pattern).
-   - Encodes `jobs.csv` once to `data/{profile}/job_embeddings.npz`.
-   - On query: encode query string, cosine-rank, emit `jobId[]` JSON.
-3. Next.js route `web/app/api/jobs/search/route.ts` spawns subprocess (same `run/route.ts` pattern).
-4. Jobs page: search bar toggles text filter (instant) ↔ semantic search (Enter/button).
+- Temporary files that were left out of the commits on purpose: `.claude/report.md`, `.claude/report-assets/`, `.claude/plans/review-fixes.md`. Delete them when you no longer need them.
+- Known gaps the developer left (also in the earlier handoff text): the Gantt view cannot show a stage before the first logged change; `POST /api/scrape/run` ignores `JOBSPY_DATA_DIR`; the undo toast is not reachable by keyboard while the drawer is open; rows change height when their buttons change.
 
-**Zero API calls. Zero credentials. No model lock-in.**
+## Still open from before
 
----
+- **Step 10, scrape scheduler** (blocked on `pnpm add node-cron` and `pnpm add -D @types/node-cron` in `web/`). The checklist and file list are in the previous handoff: `git show fe6ede9:.claude/HANDOFF.md`.
+- Semantic search with local `sentence-transformers` (same old handoff). It needs job descriptions, which the CSV and the scraper do not keep yet. The new CSV parser removes the main blocker.
+- Not built from the review: job description in the drawer, keyboard triage (J/K/S/X), filters in the URL, notes and follow-up dates, read-only demo mode, CSRF checks, upload size cap, the Statistics "Timeline" meaning. Details: `.claude/report.md`, sections 7 and 8.
 
-## Current Task: Step 10 — Scrape Scheduler
+## Owner preferences learned
 
-### What It Does
+- Solo use now; a public demo later. A polished demo must also serve daily use.
+- No lock-in to one model or API provider.
+- Statuses must flow freely in any direction, with undo instead of blocking or confirming.
+- Wants subagents (Opus) for review and implementation work, and a plan with declared tests first.
 
-Schedule scrapes via cron (e.g., daily 8 AM). Schedule stored in `scrape_config.json` as `schedule: string | null`.
+## Environment (this machine, Windows 10)
 
-### Blocked On
+- Installed this session: `uv` 0.12.20 (winget, `--source winget` because the msstore source fails with a certificate error), `pnpm` 11.24.0 (global, via npm), Node 22.23.3 (was there), `vitest` in `web/`.
+- Next.js telemetry is off.
+- No dev server is running. Start it with `cd web && pnpm dev` (http://localhost:3000).
+- The `demo` profile (65 fictional jobs: 34 new, 9 shortlisted, 8 applied, 4 interview, 1 offer, 5 rejected, 4 skipped) is in `data/demo/` (gitignored). Reset it with `uv run python scripts/seed_demo.py .` from the repo root. Then delete `data/demo/status_log.jsonl`. The expected counts are 22 active and 9 archived.
+- Browser checks used Playwright with Chromium. Chromium is in `%LOCALAPPDATA%\ms-playwright`. The `playwright` npm package sits in the old session's temp folder and is gone in a new session. Install it again outside the repo.
+- Sessions ran from `C:\Windows\system32` with admin rights. Start the next one from the repo folder instead.
+- Other repos cloned to the Desktop, not set up: `certpal`, `manuscripts`.
 
-Permission to run in `web/`:
-```bash
-pnpm add node-cron
-pnpm add -D @types/node-cron
-```
-
-### Files to Create/Modify
-
-| File | Action |
-|------|--------|
-| `web/lib/config.ts` | Add `schedule: string \| null` field |
-| `web/lib/scheduler.ts` | Create: `Map<profile, CronJob>` registry |
-| `web/instrumentation.ts` | Create: Next.js startup hook |
-| `web/app/api/scrape/config` (PUT) | Re-register cron on schedule change |
-| `web/app/scrape/page.tsx` | Schedule selector UI (Off / 8 AM / midnight / Monday / Custom) |
-| `web/app/globals.css` | Schedule control styles |
-
-### Todo Checklist
-
-```
-[in_progress] Install node-cron + types
-[pending] Add schedule field to ScrapeConfig
-[pending] Create scheduler.ts registry
-[pending] Create instrumentation.ts hook
-[pending] Wire PUT route to re-register
-[pending] Add schedule UI to scrape page
-[pending] pnpm build green
-```
-
----
-
-## Key References
-
-- **Plan:** `.claude/plans/all-of-them-sequentially-lexical-whistle.md` (all 10 steps)
-- **Spec:** `.claude/SPEC.md` (architecture, API routes, data model)
-- **Design log:** `.claude/DESIGN-DECISIONS.md` (append-only decisions)
-- **Recent commits:** `b972f6a` (stats page) … `8ee4bbe` (toast inline)
-
----
-
-## How to Pick Up
-
-**Next session:**
-1. Request permission for `pnpm add node-cron @types/node-cron`.
-2. Follow Step 10 checklist (config.ts → scheduler.ts → instrumentation.ts → wire PUT → UI).
-3. Verify with `pnpm build` and smoke test schedule on dev server.
-4. If bandwidth: scope out Step 9 (semantic search via sentence-transformers).
-
-**Principle:** No hard dependency on a single API provider. Embeddings should be pluggable (SBERT, Hugging Face, OpenAI Embedding, transformers.js).
-
----
-
-## Suggested Skills
+## Suggested skills
 
 - `asd-ste100` — always-on for all text output
-- `test-driven-development` — when implementing Step 10 / Step 9
+- `test-driven-development` — for every change
+- `grill-me` — before scoping the next feature

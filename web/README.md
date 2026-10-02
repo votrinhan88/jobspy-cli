@@ -1,36 +1,43 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# jobspy-cli web app
 
-## Getting Started
+The web interface for jobspy-cli. It is a [Next.js](https://nextjs.org) app (App Router, TypeScript, Tailwind CSS). It runs the Python scraper as a subprocess and keeps all data in flat files under `../data/<profile>/`.
 
-First, run the development server:
+This app has no login and no database. Run it on your own computer only.
+
+## Getting started
+
+Install Node.js and pnpm (the pnpm version is pinned in `package.json`). Then:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+pnpm install
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000). Create a profile on the Profile page first.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+The scraper needs the Python environment. From the repository root, run `uv sync` once.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Commands
 
-## Learn More
+| Command | What it does |
+|---|---|
+| `pnpm dev` | Start the development server |
+| `pnpm build` | Make a production build |
+| `pnpm start` | Serve the production build |
+| `pnpm lint` | Run ESLint |
+| `pnpm test` | Run the Vitest unit tests |
 
-To learn more about Next.js, take a look at the following resources:
+## Pages
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Profile, Resume, Scrape, Jobs, Applications (Kanban, Table and Gantt views) and Statistics.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Data and tests
 
-## Deploy on Vercel
+- Data folder: `../data/<profile>/`. Set `JOBSPY_DATA_DIR` to use a different folder.
+- Tests are in `tests/`. They use a temporary data folder through `JOBSPY_DATA_DIR`. They never touch the real `data/` folder.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## More information
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Spec, data model and API routes: [`../.claude/SPEC.md`](../.claude/SPEC.md)
+- Design decisions: [`../.claude/DESIGN-DECISIONS.md`](../.claude/DESIGN-DECISIONS.md)
+- This version of Next.js has breaking changes. Read [`AGENTS.md`](AGENTS.md) before you use a Next.js API you do not know.

@@ -41,9 +41,11 @@ Engine invariants — do not break:
 Before committing, all of:
 
 - Python suite green: `uv run pytest`
+- Web unit tests green: `cd web && pnpm test`
 - Web production build green: `cd web && pnpm build`
 - `cd web && pnpm lint` clean (advisory, not a hard gate)
 - Tests must not depend on live job boards, network calls, or the real `.geocache.json` — use inline synthetic inputs and temp paths (geocoder/scraper tests are pure functions over provided frames).
+- Web tests must not touch the real `data/` folder. Set `JOBSPY_DATA_DIR` to a temp folder (see `web/tests/helpers.ts`).
 
 ## Command Quick-ref
 
@@ -59,6 +61,7 @@ Web:
 - dev: `cd web && pnpm dev`
 - build: `cd web && pnpm build`
 - lint: `cd web && pnpm lint`
+- tests: `cd web && pnpm test` (Vitest; tests use a temp data folder through `JOBSPY_DATA_DIR`)
 
 ## Stack
 
@@ -73,6 +76,7 @@ Web:
 
 - Next.js, TypeScript, App Router
 - shadcn/ui, Tailwind CSS
+- Vitest (unit tests in `web/tests/`)
 - pnpm
 - Data: flat files under `data/{profile}/`
 
