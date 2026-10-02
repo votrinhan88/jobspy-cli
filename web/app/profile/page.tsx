@@ -12,6 +12,7 @@ export default function ProfilePage() {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
+  const [renaming, setRenaming] = useState(false);
   const [notification, setNotification] = useState<{ kind: "success" | "error"; msg: string } | null>(null);
   const [notifFading, setNotifFading] = useState(false);
   const notifTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -139,21 +140,31 @@ export default function ProfilePage() {
   async function handleRename(oldName: string) {
     const trimmed = editName.trim();
     if (!trimmed || trimmed === oldName) { cancelEdit(); return; }
-    // create new, then delete old — no rename API needed
-    const createRes = await fetch("/api/profiles", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: trimmed }),
-    });
-    if (!createRes.ok) {
-      const data = await createRes.json();
-      notify("error", data.error ?? "Failed to rename profile");
-      return;
+    setRenaming(true);
+    try {
+      const res = await fetch(`/api/profiles/${encodeURIComponent(oldName)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: trimmed }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        notify("error", data.error ?? "Failed to rename profile");
+        return;
+      }
+      if (active === oldName) {
+        sessionStorage.setItem("profile_notif", JSON.stringify({ kind: "success", msg: `Renamed to "${data.name}"` }));
+        window.location.reload();
+        return;
+      }
+      setProfiles((prev) => [...prev.filter((p) => p !== oldName), data.name].sort());
+      cancelEdit();
+      notify("success", `Renamed to "${data.name}"`);
+    } catch {
+      notify("error", "Failed to rename profile");
+    } finally {
+      setRenaming(false);
     }
-    await fetch(`/api/profiles/${encodeURIComponent(oldName)}`, { method: "DELETE" });
-    setProfiles((prev) => [...prev.filter((p) => p !== oldName), trimmed].sort());
-    cancelEdit();
-    notify("success", `Renamed to "${trimmed}"`);
   }
 
   return (
@@ -173,7 +184,7 @@ export default function ProfilePage() {
           value={newName}
           onChange={(e) => setNewName(e.target.value)}
           required
-          pattern="[a-zA-Z0-9_-]{1,64}"
+          pattern="[a-zA-Z0-9_\-]{1,64}"
           title="Letters, digits, hyphens, underscores. Max 64 characters."
         />
         <button className="btn btn-primary" type="submit" disabled={creating}>
@@ -204,11 +215,15 @@ export default function ProfilePage() {
                       value={editName}
                       onChange={(e) => setEditName(e.target.value)}
                       autoFocus
-                      pattern="[a-zA-Z0-9_-]{1,64}"
-                      onKeyDown={(e) => e.key === "Escape" && cancelEdit()}
+                      pattern="[a-zA-Z0-9_\-]{1,64}"
+                      aria-label="New profile name"
+                      readOnly={renaming}
+                      onKeyDown={(e) => e.key === "Escape" && !renaming && cancelEdit()}
                     />
-                    <button type="submit" className="btn btn-sm btn-primary">Save</button>
-                    <button type="button" className="btn btn-sm btn-secondary" onClick={cancelEdit}>Cancel</button>
+                    <button type="submit" className="btn btn-sm btn-primary" disabled={renaming}>
+                      {renaming ? "Saving…" : "Save"}
+                    </button>
+                    <button type="button" className="btn btn-sm btn-secondary" onClick={cancelEdit} disabled={renaming}>Cancel</button>
                   </form>
                 ) : (
                   <>
