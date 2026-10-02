@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Nav } from "@/components/nav";
+import { ToastProvider } from "@/components/toast";
 import { getActiveProfile } from "@/lib/profile";
 import "./globals.css";
 
@@ -22,10 +23,12 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
         />
       </head>
       <body>
-        <div className="app-shell">
-          <Nav activeProfile={activeProfile} />
-          <main className="app-main">{children}</main>
-        </div>
+        <ToastProvider>
+          <div className="app-shell">
+            <Nav activeProfile={activeProfile} />
+            <main className="app-main">{children}</main>
+          </div>
+        </ToastProvider>
       </body>
     </html>
   );

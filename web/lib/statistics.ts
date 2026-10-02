@@ -1,13 +1,7 @@
 import type { Job, JobStatus } from "@/lib/csv";
+import { STATUSES, isActiveStatus, isArchivedStatus, isRemote } from "@/lib/status";
 
-export const STATUS_ORDER: JobStatus[] = [
-  "shortlisted",
-  "applied",
-  "interview",
-  "offer",
-  "rejected",
-  "skipped",
-];
+export const STATUS_ORDER: JobStatus[] = STATUSES.filter((s) => s !== "");
 
 export interface StatusCount {
   status: JobStatus;
@@ -28,10 +22,6 @@ export interface Statistics {
   timeline: TimelinePoint[];
   topCompanies: { name: string; count: number }[];
   topLocations: { name: string; count: number }[];
-}
-
-function isRemote(value: string): boolean {
-  return /^(true|yes|1)$/i.test(value.trim());
 }
 
 function weekKey(iso: string): string {
@@ -68,10 +58,8 @@ export function computeStatistics(jobs: Job[]): Statistics {
     status,
     count: jobs.filter((j) => j.status === status).length,
   }));
-  const active = perStatus.reduce((sum, s) => sum + s.count, 0);
-  const archived =
-    perStatus.find((s) => s.status === "rejected")!.count +
-    perStatus.find((s) => s.status === "skipped")!.count;
+  const active = jobs.filter((j) => isActiveStatus(j.status)).length;
+  const archived = jobs.filter((j) => isArchivedStatus(j.status)).length;
   const remote = jobs.filter((j) => isRemote(j.is_remote)).length;
 
   const weekCounts = new Map<string, number>();
