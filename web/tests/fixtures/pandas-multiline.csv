@@ -1,0 +1,6 @@
+"job_id","title","company","location","description","status","status_updated_at"
+"acme-data-scientist-1a2b3c4d","Data Scientist","Acme, Inc.","Hanoi, Vietnam","Line one
+Line two with ""quotes""
+
+Line four","applied","2026-09-01T10:00:00Z"
+"beta-ml-engineer-5e6f7a8b","ML Engineer","Beta","Sydney, NSW, Australia","","",""

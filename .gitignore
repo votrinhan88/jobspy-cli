@@ -3,6 +3,7 @@
 __pycache__/
 *.py[cod]
 *.csv
+!web/tests/fixtures/*.csv
 .geocache.json
 
 # Profile data (user-specific, not committed)

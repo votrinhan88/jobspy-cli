@@ -27,33 +27,62 @@ export interface Job {
   [key: string]: string;
 }
 
-function parseCsvLine(line: string): string[] {
-  const fields: string[] = [];
-  let current = "";
+export function parseCsv(text: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = "";
   let inQuotes = false;
+  let rowHasContent = false;
+  let i = text.charCodeAt(0) === 0xfeff ? 1 : 0;
 
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
-    if (ch === '"') {
-      if (inQuotes && line[i + 1] === '"') {
-        current += '"';
+  const endRow = () => {
+    row.push(field);
+    const blank = row.length === 1 && row[0] === "" && !rowHasContent;
+    if (!blank) rows.push(row);
+    row = [];
+    field = "";
+    rowHasContent = false;
+  };
+
+  while (i < text.length) {
+    const ch = text[i];
+    if (inQuotes) {
+      if (ch === '"' && text[i + 1] === '"') {
+        field += '"';
+        i += 2;
+      } else if (ch === '"') {
+        inQuotes = false;
         i++;
       } else {
-        inQuotes = !inQuotes;
+        field += ch;
+        i++;
       }
-    } else if (ch === "," && !inQuotes) {
-      fields.push(current);
-      current = "";
+      continue;
+    }
+    if (ch === '"') {
+      inQuotes = true;
+      rowHasContent = true;
+      i++;
+    } else if (ch === ",") {
+      row.push(field);
+      field = "";
+      rowHasContent = true;
+      i++;
+    } else if (ch === "\r" || ch === "\n") {
+      endRow();
+      i += ch === "\r" && text[i + 1] === "\n" ? 2 : 1;
     } else {
-      current += ch;
+      field += ch;
+      rowHasContent = true;
+      i++;
     }
   }
-  fields.push(current);
-  return fields;
+  if (rowHasContent || field !== "") endRow();
+  return rows;
 }
 
 function toCsvField(value: string): string {
-  if (value.includes(",") || value.includes('"') || value.includes("\n")) {
+  if (/[",\r\n]/.test(value)) {
     return `"${value.replace(/"/g, '""')}"`;
   }
   return value;
@@ -67,12 +96,9 @@ export async function readJobs(csvPath: string): Promise<Job[]> {
     return [];
   }
 
-  const lines = content.split(/\r?\n/).filter(Boolean);
-  if (lines.length < 2) return [];
-
-  const headers = parseCsvLine(lines[0]);
-  return lines.slice(1).map((line) => {
-    const values = parseCsvLine(line);
+  const [headers, ...records] = parseCsv(content);
+  if (!headers) return [];
+  return records.map((values) => {
     const obj: Record<string, string> = {};
     headers.forEach((h, i) => {
       obj[h] = values[i] ?? "";
@@ -81,14 +107,60 @@ export async function readJobs(csvPath: string): Promise<Job[]> {
   });
 }
 
+function columnUnion(jobs: Job[]): string[] {
+  const seen = new Set<string>();
+  for (const job of jobs) {
+    for (const key of Object.keys(job)) seen.add(key);
+  }
+  return [...seen];
+}
+
+// Windows can refuse a rename for a moment while another process (an editor, a scrape) holds the file.
+async function renameWithRetry(from: string, to: string): Promise<void> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await fs.rename(from, to);
+      return;
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (attempt >= 5 || (code !== "EPERM" && code !== "EBUSY" && code !== "EACCES")) throw err;
+      await new Promise((resolve) => setTimeout(resolve, 50 * (attempt + 1)));
+    }
+  }
+}
+
 export async function writeJobs(csvPath: string, jobs: Job[]): Promise<void> {
   if (jobs.length === 0) return;
-  const headers = Object.keys(jobs[0]);
+  const headers = columnUnion(jobs);
   const lines = [
-    headers.join(","),
+    headers.map(toCsvField).join(","),
     ...jobs.map((job) => headers.map((h) => toCsvField(job[h] ?? "")).join(",")),
   ];
-  await fs.writeFile(csvPath, lines.join("\n"), "utf-8");
+  const tmpPath = path.join(
+    path.dirname(csvPath),
+    `.${path.basename(csvPath)}.${process.pid}.${Date.now()}.tmp`
+  );
+  try {
+    await fs.writeFile(tmpPath, lines.join("\n") + "\n", "utf-8");
+    await renameWithRetry(tmpPath, csvPath);
+  } catch (err) {
+    await fs.rm(tmpPath, { force: true });
+    throw err;
+  }
+}
+
+export async function updateJob(
+  csvPath: string,
+  jobId: string,
+  patch: Partial<Pick<Job, "status" | "status_updated_at">>
+): Promise<{ before: Job; after: Job } | null> {
+  const jobs = await readJobs(csvPath);
+  const idx = jobs.findIndex((j) => j.job_id === jobId);
+  if (idx === -1) return null;
+  const before = jobs[idx];
+  jobs[idx] = { ...before, ...patch };
+  await writeJobs(csvPath, jobs);
+  return { before, after: jobs[idx] };
 }
 
 export async function patchJob(
@@ -96,10 +168,5 @@ export async function patchJob(
   jobId: string,
   patch: Partial<Pick<Job, "status" | "status_updated_at">>
 ): Promise<Job | null> {
-  const jobs = await readJobs(csvPath);
-  const idx = jobs.findIndex((j) => j.job_id === jobId);
-  if (idx === -1) return null;
-  jobs[idx] = { ...jobs[idx], ...patch };
-  await writeJobs(csvPath, jobs);
-  return jobs[idx];
+  return (await updateJob(csvPath, jobId, patch))?.after ?? null;
 }
