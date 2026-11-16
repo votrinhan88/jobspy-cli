@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import type { FlowGraph } from "@/lib/sankey";
-import { layoutSankey, type LayoutLink } from "@/lib/sankey-layout";
+import { bandPath, layoutSankey, type LayoutLink } from "@/lib/sankey-layout";
 
 const WIDTH = 720;
 const MAX_HEIGHT = 320;
@@ -77,14 +77,12 @@ export function SankeyChart({ graph }: { graph: FlowGraph }) {
       <title>Application flow between stages</title>
       <g>
         {layout.links.map((link) => {
-          const mid = (link.source.x1 + link.target.x0) / 2;
           return (
             <path
               key={`${link.source.id}>${link.target.id}`}
               data-sankey-link
               className={`sankey-link sankey-link--${stageClass(link.target.id)}`}
-              d={`M${link.source.x1},${link.y0} C${mid},${link.y0} ${mid},${link.y1} ${link.target.x0},${link.y1}`}
-              strokeWidth={Math.max(1, link.width)}
+              d={bandPath(link)}
             >
               <title>{`${link.source.label} to ${link.target.label}: ${link.value}`}</title>
             </path>

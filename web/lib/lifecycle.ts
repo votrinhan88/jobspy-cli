@@ -14,14 +14,21 @@ export function isStale(
   return now - seen > days * DAY_MS;
 }
 
-export function isNewInRun(
-  firstSeenAt: string,
-  runStartedAt: string | null | undefined
-): boolean {
-  const first = Date.parse((firstSeenAt ?? "").trim());
-  const run = Date.parse((runStartedAt ?? "").trim());
-  if (Number.isNaN(first) || Number.isNaN(run)) return false;
-  return first >= run;
+// A scrape run stamps last_seen_at on every row it returns, so the newest value is the time of
+// the latest crawl. This is the one place that defines it.
+export function latestCrawlAt(jobs: { last_seen_at: string }[]): number | null {
+  let latest: number | null = null;
+  for (const job of jobs) {
+    const seen = Date.parse((job.last_seen_at ?? "").trim());
+    if (!Number.isNaN(seen) && (latest === null || seen > latest)) latest = seen;
+  }
+  return latest;
+}
+
+// A job is New when the latest crawl is the first one that returned it.
+export function isNew(firstSeenAt: string, crawlAt: number | null): boolean {
+  if (crawlAt === null) return false;
+  return Date.parse((firstSeenAt ?? "").trim()) === crawlAt;
 }
 
 export function isClosed(closedAt: string): boolean {

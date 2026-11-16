@@ -27,6 +27,10 @@ describe("computeStatistics", () => {
     expect(computeStatistics(SEED).active).toBe(22);
   });
 
+  it("untriaged counts the jobs that never changed status", () => {
+    expect(computeStatistics(SEED).untriaged).toBe(34);
+  });
+
   it("archived counts rejected and skipped", () => {
     expect(computeStatistics(SEED).archived).toBe(9);
   });
@@ -76,7 +80,7 @@ describe("computeStatistics", () => {
     ]);
     expect(stats.topLocations).toEqual([
       { name: "Việt Nam, Hồ Chí Minh, Ấp Củ Chi", count: 1 },
-      { name: "Australia, New South Wales, Sydney", count: 1 },
+      { name: "Australia, NSW, Sydney", count: 1 },
     ]);
   });
 

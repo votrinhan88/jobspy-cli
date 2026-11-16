@@ -262,3 +262,92 @@ For full UI conventions and page specs, see `.agents/SPEC.md`.
 
 - **Labels leave the plot** - beside a bar or above it, a stage label landed on a flow that enters a later stage. A fixed header row per column cannot collide with a band.
 - **Skipped-column counts move left** - a flow from column 1 to column 3 has its midpoint on column 2's bar. The count sits at 32% of the curve, where no bar is.
+
+## 2026-11-05 - One Location Label Everywhere
+
+- **One formatter for every page** - the Statistics "Top locations" list counted the raw `location` string, so it read "Hanoi, Vietnam" while the Jobs table read "Việt Nam, Hồ Chí Minh, Ấp Củ Chi". Statistics now uses `formatLocation`, the same function as the Jobs, Applications and Archived pages.
+- **The rank prefix goes from the region too** - "Thành phố Hồ Chí Minh" from the geocoder became "Hồ Chí Minh", the same label the city facet uses. The strip lives in `splitLocation`, so the sort and group tiers agree with the display.
+- **Sankey bands follow the source** - incoming bands at a stage are stacked by where they leave their source, not by a hard-coded stage order. A fixed per-pair order would break for the next skipped stage.
+
+## 2026-11-05 - Sankey Shows Every Exit
+
+- **Accepted is a status again** - Offer needs an exit that is not Reject. The status came back after commit 3ab3748 dropped it; the old decision in this log still holds.
+- **Exits are one stacked column** - Accepted, Rejected, Skipped and Open sit in a single column, so a skip from Scrape does not cross every stage. Their labels go to the right of each bar, because a header label would collide.
+- **Open comes from the last status, not from the moves** - a job that stops at Interview has no move out, so the Open link is counted once per job from its final logged status. Counting from the moves would show an Interview that was passed through and left, not one that stopped.
+- **Scrape replaces Untriaged on the chart only** - the empty status keeps its name in the table and the filters. The chart label is the only change.
+
+## 2026-11-05 - Flow Counts Jobs, Not Log Lines
+
+- **Undo cancels the move it reverses** - a job sent to Skipped and then back to Untriaged was counted twice from Scrape (100 jobs, 103 Scrape exits). A move back to the stage just left cancels the move before it. The log keeps every line; only the chart reads the cancelled path.
+- **Square-root band widths** - Skipped held 97 of 100 jobs and flattened the active stages into hairlines. Widths use sqrt(count), so the largest band is about 6 times the smallest instead of 32 times. Labels still show the raw count.
+
+## 2026-11-05 - One Branch Order at Every Node
+
+- **Branches sort by the node at the other end, on both sides** - the outgoing and incoming stacks used different rules (link order and source height), so bands at a node crossed. Each node now orders all its branches by the centre of the node at the other end. Ties on the shared centre line go to the shorter span, so a skip band sits outside the stage it passes.
+- **Long-band counts sit near the target** - a count placed 32% along a skip band landed on the pipeline stages. Skip bands now carry their count at 85%, and counts that still overlap move down one row.
+
+## 2026-11-05 - Pending Is a Count, Not an Outcome
+
+- **No Open node** - the Open exit came from the "(and hanging)" case in the flow examples, but a job that stops mid-pipeline has no exit, so it is shown as a pending count on its stage label.
+- **Outcome order top to bottom: Accepted, Rejected, Skipped.**
+- **Known limit: no segment inside a flow** - Skipped holds most jobs and its band spans nearly the full plot height between Scrape and the outcome column, so any stage bar between them lies inside it. Not fixed; the options are in the chat summary, pending a decision.
+
+## 2026-11-05 - Spine Layout: Exits Rise Above the Pipeline
+
+- **Scrape and outcomes hang from the top; the pipeline sits on a baseline.** Exits leave high and rise past the stages. A band that passes over a stage is the only reason a stage moves, and it moves down by the overlap plus a clearance.
+- **Only the passed stage moves, not the baseline.** Moving the baseline moved both ends of a skip band together, so the overlap never closed. Pushing the passed stage down closes it in one step.
+- **Pending shows as a second label line** under the count, so the header row stays readable.
+
+## 2026-11-05 - Skipped Sits at the Bottom
+
+- **Outcomes stack on the baseline, Skipped lowest.** The stack hung from the top, which put Skipped first. Accepted, Rejected, Skipped now run top to bottom on the same baseline as the pipeline.
+- **Any overlap moves the stage down.** The checker ignored a band whose centre sat below a stage's centre, so a band could run under a stage's lower half. Every overlap now counts.
+
+- **Status Log Keeps Forward Steps** - `status_log.jsonl` holds forward steps only. A backward move (an undo, or a drop onto an earlier stage) cuts that job's steps after the last arrival at the stage it returns to, and writes no line. Reason: the flows must balance with the pending count, and a log of every back-and-forth made the saved history disagree with the board. Trade-off: the back-and-forth record is gone. The file was compacted once; the pre-change copy is `status_log.jsonl.bak` in the profile folder.
+
+- **Sankey Ports And Channels** - Progress leaves a stage from its top and drops from its bottom, so the middle of the stage is free for pending jobs. Progress sits in the top 35% of the canvas and drops in the bottom 35%. Reason: a wide drop band would otherwise cut through the progress stages, and sorting ports by destination keeps bands from crossing at the node. Trade-off: a stage with many pending jobs gets a tall empty middle, and a stage whose outgoing sqrt sum exceeds its incoming band still leaves an empty influx.
+
+- **Archive Holds Accepted And Rejected; Statistics Loses The Pipeline Bars** - Accepted is an end state like Rejected, so the Applications archive section is titled Archive and the page subtitle counts accepted and rejected jobs. The Statistics pipeline bars repeated the Flow Sankey, so they are gone. The 187 never-moved jobs stay out of the Sankey and show as a "Not yet reviewed" summary card. Sankey node and link colours match the status chips (Offer grey, Accepted green). The Sankey node already grows to the larger of its incoming and outgoing weight; filling the incoming band to that height would need variable-width bands and is not done.
+
+- **Job Titles Save And Load Are Per Profile** - The Job titles list had one shared `keywords.txt` in the repo root and an "Import from" button that copied it into any profile. Each profile now has its own `data/{profile}/keywords.txt`, written by a save icon and read by a load icon. Load replaces the titles, as the old import did. The root `keywords.txt` stays as a template for the CLI `--job ./keywords.txt` only; the web app no longer reads it.
+
+## 2026-11-12 - Resume Text Editing (reverses part of Resume Library and Review)
+
+- **Edit the text, keep the import** - the Resume page can edit a resume as Markdown text. The earlier rule "the app does not edit resumes" and "the app never edits a resume from a model reply" no longer holds. The user wanted to tailor wording and apply suggestions without leaving the app. The imported file is never changed. Only `text.txt` changes, and `meta.json` gets `edited: true`.
+- **Small scope** - no version tree, no headless browser, no structured form. A job-specific copy is "Save as new tag", which fits the one-tag, one-resume rule. A UI/UX expert proposed snapshots, branches, Playwright PDF export and a three-column layout. These were rejected as too heavy for one user. The reason for dropping LaTeX still applies to a headless Chromium. Revisit after real use.
+- **PDF through the browser** - the preview is a light page with a print style (A4, one column, Arial). The user prints to PDF. Trade-off: the result depends on the browser print dialog.
+- **Apply is explicit and exact** - a suggested line replaces the original only when that text appears once. A missing or repeated line gives an error and changes nothing. The model never writes to a resume by itself. The user presses Apply.
+- **Edits show as a changed resume** - saving raises the version and the hash, so the existing "Submitted with this resume" warning fires. The editor says so and offers "Save as new tag" to keep the old text.
+
+## 2026-11-13 - Refactor Before The Next Features
+
+- **Type scale tokens, split stylesheet** - 109 literal `font-size` values became `--text-*` tokens, and the 3,800-line `globals.css` became 16 files imported in the original order. Reason: new features touch CSS, and one file with literal sizes made every change a search. Trade-off: the cascade now depends on import order in `globals.css`.
+- **Chip is shared; Popover and Tabs are not** - the jobs filters and the resume tag bar used the same toggle chip with two copies of the CSS, so they share `Chip`. Resume tag chips changed slightly in look (padding, weight, panel background). The popovers and the New resume tabs each have one real use with different behaviour, so a shared version would only add props.
+- **Pages split by role** - a page owns state and layout. Hooks own polling and saving (Scrape). Components own one view each (Applications, Resume). `ResumeDetailHead` owns rename, fork and delete state, and the page remounts it with `key={tag}` to reset that state when the viewed resume changes.
+- **Test fixtures stay per file** - each test file builds jobs with its own defaults, so a shared factory would not shrink them. The full run takes 31 s.
+
+## 2026-11-13 - PDF Import Structure And Model Conversion
+
+- **Heuristic first, model second** - `structurePdf` reads font size and position and costs nothing, so it runs on every PDF import. It returns null when it finds no heading and no bullet, and the import keeps plain text as before. The model step is a retry the user starts, because it sends the resume to a third party.
+- **Conversion lives in the editor, not the import** - the button works on any resume text, shows the size first, and puts the reply in the editor as an unsaved change. Back with the discard prompt undoes it. The route is `/api/resume-convert`; a route under `/api/resumes/` would hide a resume tagged `convert`.
+- **One model transport** - `callModel` in `lib/analysis.ts` holds the Anthropic and OpenAI-compatible calls. The fit analysis and the conversion share it.
+
+## 2026-11-13 - Resume Fork Graph
+
+- **Parent in `meta.json`, no guessing** - a fork stores its parent tag at creation. Older resumes show as roots. A text-similarity guess would draw edges the user never made.
+- **Rename follows, delete detaches** - a renamed parent updates its children. A deleted parent clears `parent` on its children, so a new resume that reuses the tag does not adopt them.
+- **Forks only** - the graph shows forks, not versions of one tag. Versions stay a number in the table.
+
+## 2026-11-13 - Sankey Endpoint Rule
+
+- **Height from the endpoints** - the arriving end of a band is sqrt(count). A stage is as tall as its arrivals, and its leaving ends are scaled to fill it. Heights resolve in one pass with no max rule. Pending jobs no longer show as an empty middle.
+
+## 2026-11-13 - New Means Newly Seen In The Latest Crawl
+
+- **One definition** - New replaces the 3-day and 14-day windows. A job is New when its `first_seen_at` equals the newest `last_seen_at` in the data. The rule needs no clock, so a New job stays New until the next crawl.
+- **A crawl that finds nothing new** shows no New jobs.
+
+## 2026-11-13 - Jobs Is The Inbox, Applications Is The Pipeline
+
+- **Roles** - Jobs triages untriaged jobs. Applications holds the jobs the user committed to, Shortlisted and later. The Applications table view stays (Kanban, Table, Gantt). The user did not ask to remove it. Both tables end in a visible Action column.
+- **One table** - `JobsTable` serves Jobs. Tracked rows there carry the next-stage button and the status menu.

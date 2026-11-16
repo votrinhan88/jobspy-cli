@@ -1,0 +1,242 @@
+/* ── Resume review page ─────────────────────────────────────────────────── */
+
+.review-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+  margin-top: 24px;
+}
+
+.review-layout > * {
+  min-width: 0;
+}
+
+@media (max-width: 900px) {
+  .review-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.fit-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--app-ink);
+  cursor: pointer;
+}
+
+.fit-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+  color: var(--app-ink);
+}
+
+.fit-table th,
+.fit-table td {
+  padding: 8px 10px;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--app-border);
+  overflow-wrap: anywhere;
+}
+
+.fit-table th {
+  font-weight: 600;
+  color: var(--app-ink-muted);
+  white-space: nowrap;
+}
+
+.fit-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.verdict {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.verdict--strong {
+  background: var(--app-success-bg);
+  color: var(--app-success-text);
+  border-color: color-mix(in srgb, var(--app-success-text) 25%, transparent);
+}
+
+.verdict--partial {
+  background: color-mix(in srgb, #d97706 10%, transparent);
+  color: #b45309;
+  border-color: color-mix(in srgb, #d97706 25%, transparent);
+}
+
+.verdict--weak {
+  background: color-mix(in srgb, #d97706 10%, transparent);
+  color: #b45309;
+  border-color: color-mix(in srgb, #d97706 25%, transparent);
+}
+
+.verdict--missing {
+  background: var(--app-error-bg);
+  color: var(--app-error-text);
+  border-color: color-mix(in srgb, var(--app-error-text) 25%, transparent);
+}
+
+.alert-warning {
+  background: color-mix(in srgb, #d97706 10%, transparent);
+  color: #b45309;
+  border-color: color-mix(in srgb, #d97706 25%, transparent);
+}
+
+.fit-rewrite {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--app-border);
+  border-radius: 6px;
+  background: var(--app-surface);
+}
+
+.fit-rewrite-original {
+  color: var(--app-ink-muted);
+  text-decoration: line-through;
+  overflow-wrap: anywhere;
+}
+
+.fit-rewrite-suggested {
+  color: var(--app-ink);
+  overflow-wrap: anywhere;
+}
+
+.resume-new-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  background: var(--app-surface);
+}
+
+.resume-new-tab {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 6px 12px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--app-ink-muted);
+  font: inherit;
+  font-size: var(--text-md);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.12s, color 0.12s;
+}
+
+.resume-new-tab:hover {
+  color: var(--app-ink);
+}
+
+.resume-new-tab[aria-selected="true"] {
+  background: var(--app-panel);
+  color: var(--app-ink);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 14%), 0 0 0 1px var(--app-border);
+}
+
+.resume-new-tab:focus-visible {
+  outline: 2px solid var(--app-accent);
+  outline-offset: 1px;
+}
+
+.resume-new-slot > .hint,
+.resume-new-note {
+  margin: 0;
+}
+
+.resume-new-note {
+  min-height: 1.6em;
+}
+
+.resume-new-error {
+  min-height: 44px;
+}
+
+.resume-new-dialog {
+  padding: 20px;
+  overflow-y: auto;
+}
+
+.resume-new-dialog .resume-card {
+  border: none;
+  padding: 0;
+  background: transparent;
+}
+
+input[type="file"] {
+  color: var(--app-ink-muted);
+  font: inherit;
+  font-size: var(--text-md);
+}
+
+input[type="file"]::file-selector-button {
+  margin-right: 12px;
+  padding: 6px 14px;
+  border: 1px solid var(--app-border);
+  border-radius: 6px;
+  background: var(--app-panel);
+  color: var(--app-ink);
+  font: inherit;
+  font-size: var(--text-md);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+input[type="file"]::file-selector-button:hover {
+  background: var(--app-surface);
+  border-color: var(--app-ink-muted);
+}
+
+.resume-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 20;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  padding: 12px;
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  background: var(--app-panel);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 28%);
+}
+
+.resume-popover .resume-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.resume-popover-input {
+  width: 220px;
+  max-width: none;
+}
+
+.resume-popover .alert {
+  flex: 1 1 100%;
+  margin: 0;
+}
+
+.resume-detail-head .resume-actions .btn {
+  min-height: 38px;
+}

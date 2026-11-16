@@ -115,7 +115,6 @@ describe("FitReport analysis", () => {
     expect(await screen.findByText("Decent fit for the role.")).toBeInTheDocument();
     expect(JSON.parse(calls("POST /api/jobs/job-1/analysis")[0][1].body)).toEqual({ tag: "backend" });
     expect(screen.getByText(/fit score/i)).toHaveTextContent("64");
-    expect(screen.getByText(/does not predict/i)).toBeInTheDocument();
     expect(screen.getByText("Strong Python")).toBeInTheDocument();
     const gaps = screen.getByRole("list", { name: /gaps/i });
     expect(within(gaps).getByText(/no docker/i)).toBeInTheDocument();
@@ -148,6 +147,37 @@ describe("FitReport analysis", () => {
     await userEvent.click(within(list).getByRole("button", { name: "Copy" }));
     expect(writeText).toHaveBeenCalledWith("Built and ran ETL jobs for daily reports.");
     expect(await within(list).findByText("Copied")).toBeInTheDocument();
+  });
+
+  it("applies a suggested line to the resume and tells the page", async () => {
+    routes["GET /api/jobs/job-1/analysis?tag=backend"] = () =>
+      json(200, { available: true, sendChars: 1, saved, stale: false });
+    routes["POST /api/resumes/backend/apply"] = () => json(200, { version: 3 });
+    const onApplied = vi.fn();
+    render(<FitReport jobId="job-1" tag="backend" onApplied={onApplied} />);
+    const list = await screen.findByRole("list", { name: /suggested wording/i });
+    await userEvent.click(within(list).getByRole("button", { name: "Apply" }));
+
+    expect(await within(list).findByText("Applied")).toBeInTheDocument();
+    const [, init] = calls("POST /api/resumes/backend/apply")[0];
+    expect(JSON.parse(init.body)).toEqual({
+      original: "Built ETL jobs.",
+      suggested: "Built and ran ETL jobs for daily reports.",
+    });
+    expect(onApplied).toHaveBeenCalled();
+  });
+
+  it("shows why a suggestion could not be applied", async () => {
+    routes["GET /api/jobs/job-1/analysis?tag=backend"] = () =>
+      json(200, { available: true, sendChars: 1, saved, stale: false });
+    routes["POST /api/resumes/backend/apply"] = () => json(409, { error: "The original line is not in the resume now." });
+    const onApplied = vi.fn();
+    render(<FitReport jobId="job-1" tag="backend" onApplied={onApplied} />);
+    const list = await screen.findByRole("list", { name: /suggested wording/i });
+    await userEvent.click(within(list).getByRole("button", { name: "Apply" }));
+
+    expect(await within(list).findByRole("alert")).toHaveTextContent("not in the resume now");
+    expect(onApplied).not.toHaveBeenCalled();
   });
 
   it("warns when a saved analysis is out of date", async () => {

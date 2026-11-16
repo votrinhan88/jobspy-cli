@@ -1,0 +1,62 @@
+/* ── App tokens ─────────────────────────────────────────────────────────── */
+
+:root {
+  --app-ink: #1a1d23;
+  --app-ink-muted: #6b7280;
+  --app-surface: #f7f8fa;
+  --app-panel: #ffffff;
+  --app-border: #e2e5ea;
+  --app-accent: #2563eb;
+  --app-accent-hover: #1d4ed8;
+  --app-success-bg: #f0fdf4;
+  --app-success-text: #166534;
+  --app-error-bg: #fef2f2;
+  --app-error-text: #991b1b;
+  --app-nav-h: 48px;
+  --page-pad-y: 16px;
+  --page-pad-x: 24px;
+  --page-gap: 16px;
+  --text-2xs: 10px;
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-md: 13px;
+  --text-base: 14px;
+  --text-lg: 15px;
+  --text-xl: 16px;
+  --text-2xl: 18px;
+  --text-3xl: 20px;
+  --text-4xl: 28px;
+  --app-font: var(--font-inter), system-ui, sans-serif;
+  --app-mono: var(--font-jetbrains-mono), "Fira Mono", monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --app-ink: #e8eaf0;
+    --app-ink-muted: #9ca3af;
+    --app-surface: #111318;
+    --app-panel: #1c1f26;
+    --app-border: #2a2e38;
+    --app-accent: #3b82f6;
+    --app-accent-hover: #60a5fa;
+    --app-success-bg: #052e16;
+    --app-success-text: #86efac;
+    --app-error-bg: #3b0a0a;
+    --app-error-text: #fca5a5;
+  }
+}
+
+:root[data-theme="dark"] {
+  --app-ink: #e8eaf0;
+  --app-ink-muted: #9ca3af;
+  --app-surface: #111318;
+  --app-panel: #1c1f26;
+  --app-border: #2a2e38;
+  --app-accent: #3b82f6;
+  --app-accent-hover: #60a5fa;
+  --app-success-bg: #052e16;
+  --app-success-text: #86efac;
+  --app-error-bg: #3b0a0a;
+  --app-error-text: #fca5a5;
+}
+

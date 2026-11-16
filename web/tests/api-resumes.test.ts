@@ -47,7 +47,7 @@ describe("POST /api/resumes", () => {
     const res = await upload({ tag: "backend", file: txt("cv.md", "# Jane\nPython") });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ tag: "backend", version: 1 });
-    expect((await listResumes("alice"))[0]).toMatchObject({ tag: "backend", fileName: "cv.md" });
+    expect((await listResumes("alice"))[0]).toMatchObject({ tag: "backend", ext: "md" });
   });
 
   it("imports pasted text under the tag", async () => {
@@ -131,7 +131,7 @@ describe("GET /api/resumes/[tag]/file", () => {
     expect(res.status).toBe(200);
     expect(await res.text()).toBe("# Jane");
     expect(res.headers.get("content-type")).toMatch(/^text\/plain/);
-    expect(res.headers.get("content-disposition")).toMatch(/^inline;.*my cv\.md/);
+    expect(res.headers.get("content-disposition")).toMatch(/^inline;.*a\.md/);
     expect(res.headers.get("x-content-type-options")).toBe("nosniff");
   });
 

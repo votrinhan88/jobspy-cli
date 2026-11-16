@@ -1,0 +1,384 @@
+/* ── Top bar (mobile only) ──────────────────────────────────────────────── */
+
+.topbar {
+  display: none;
+}
+
+.nav-backdrop {
+  display: none;
+}
+
+.menu-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 12px;
+  font: inherit;
+  font-size: var(--text-base);
+  font-weight: 500;
+  color: var(--app-ink);
+  background: transparent;
+  border: 1px solid var(--app-border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+/* ── Mobile layout ──────────────────────────────────────────────────────── */
+
+@media (max-width: 768px) {
+  .app-shell {
+    flex-direction: column;
+    height: 100dvh;
+  }
+
+  .app-main {
+    min-width: 0;
+    overflow-x: hidden;
+  }
+
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+    height: 56px;
+    padding: 0 16px;
+    background: var(--app-panel);
+    border-bottom: 1px solid var(--app-border);
+    box-sizing: border-box;
+  }
+
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 50;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    width: min(280px, 85vw);
+    height: auto;
+    padding: 0;
+    overflow: hidden;
+    border-bottom: none;
+    border-right: 1px solid var(--app-border);
+    transform: translateX(-100%);
+    visibility: hidden;
+    transition: transform 0.2s ease, visibility 0s linear 0.2s;
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.12);
+  }
+
+  .sidebar--open {
+    transform: translateX(0);
+    visibility: visible;
+    transition: transform 0.2s ease, visibility 0s;
+  }
+
+  .nav-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 49;
+    background: rgba(0, 0, 0, 0.25);
+  }
+
+  .sidebar-brand {
+    padding: 16px 16px 12px;
+    border-bottom: 1px solid var(--app-border);
+  }
+
+  .sidebar-nav {
+    flex: 1;
+    flex-direction: column;
+    gap: 0;
+    padding: 8px 0;
+  }
+
+  .sidebar-profile {
+    display: block;
+    padding-bottom: 8px;
+  }
+
+  .sidebar-link {
+    height: auto;
+    min-height: 44px;
+    padding: 7px 16px;
+    border-bottom: none;
+  }
+
+  .sidebar-link--active {
+    background: color-mix(in srgb, var(--app-accent) 8%, transparent);
+  }
+
+  .profile-chip {
+    max-width: 140px;
+  }
+
+  .page-content {
+    padding: 20px 16px 96px;
+  }
+
+  .page-header {
+    margin-bottom: 20px;
+  }
+
+  .page-header--row > * {
+    min-width: 0;
+  }
+
+  .header-actions {
+    flex-wrap: wrap;
+    width: 100%;
+    flex-shrink: 1;
+  }
+
+  .input,
+  .input--search,
+  .input--inline {
+    max-width: 100%;
+    min-width: 0;
+    min-height: 44px;
+    box-sizing: border-box;
+  }
+
+  .input--search {
+    flex: 1 1 100%;
+  }
+
+  .input--sm {
+    max-width: 120px;
+  }
+
+  .facet-field {
+    flex: 1 1 140px;
+  }
+
+  .facet-select {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .facet-menu {
+    min-width: 0;
+  }
+
+  .create-form,
+  .edit-form {
+    flex-wrap: wrap;
+  }
+
+  .profile-item {
+    flex-wrap: wrap;
+  }
+
+  .profile-name {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  /* Touch targets: at least 44 by 44 px. */
+  .btn,
+  .btn-sm,
+  .view-btn,
+  .filter-chip,
+  .sort-btn,
+  .status-menu-item,
+  .app-toast-action {
+    min-height: 44px;
+    min-width: 44px;
+    box-sizing: border-box;
+  }
+
+  .btn,
+  .btn-sm {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .icon-btn,
+  .app-toast-close {
+    width: 44px;
+    height: 44px;
+  }
+
+  .checkbox-label {
+    min-height: 44px;
+  }
+
+  .checkbox-label input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+  }
+
+  .job-card-title,
+  button.job-link,
+  .drawer-title-link,
+  .link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+
+  .log-spoiler summary {
+    min-height: 44px;
+    box-sizing: border-box;
+  }
+
+  .form-grid,
+  .settings-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .advanced-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-head {
+    flex-wrap: wrap;
+  }
+
+  .suggested-list,
+  .suggested-list--preview {
+    grid-template-columns: 1fr;
+    grid-template-rows: none;
+    grid-auto-flow: row;
+  }
+
+  .settings-foot .btn {
+    width: 100%;
+  }
+
+  .page-title,
+  .page-subtitle,
+  .job-card-title,
+  .job-card-company,
+  .job-card-location,
+  .drawer-title-link,
+  .drawer-company {
+    overflow-wrap: anywhere;
+  }
+
+  /* Jobs table becomes a list of cards. */
+  .table-wrap--cards {
+    overflow: visible;
+  }
+
+  .jobs-table--cards,
+  .jobs-table--cards tbody {
+    display: block;
+  }
+
+  .jobs-table--cards thead tr {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 8px;
+    border-bottom: 1px solid var(--app-border);
+  }
+
+  .jobs-table--cards thead th {
+    display: block;
+    border: none;
+  }
+
+  .jobs-table--cards thead th:not([aria-sort]) {
+    display: none;
+  }
+
+  .jobs-table--cards .sort-btn {
+    padding: 0 10px;
+    border: 1px solid var(--app-border);
+    border-radius: 6px;
+  }
+
+  .jobs-table--cards tbody tr {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 2px;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--app-border);
+  }
+
+  .jobs-table--cards tbody tr:last-child {
+    border-bottom: none;
+  }
+
+  .jobs-table--cards td {
+    display: block;
+    padding: 0;
+    border: none;
+    max-width: none;
+  }
+
+  .jobs-table--cards td[data-label="Location"]::before,
+  .jobs-table--cards td[data-label="Posted"]::before,
+  .jobs-table--cards td[data-label="Salary"]::before {
+    content: attr(data-label) ": ";
+    font-family: var(--app-font);
+    color: var(--app-ink-muted);
+  }
+
+  .jobs-table--cards .job-company-cell {
+    color: var(--app-ink-muted);
+  }
+
+  .jobs-table--cards td[data-label="Status"] {
+    margin-top: 4px;
+  }
+
+  .jobs-table--cards .action-cell {
+    width: auto;
+    text-align: left;
+    margin-top: 6px;
+  }
+
+  .jobs-table--cards .row-actions--end {
+    justify-content: flex-start;
+  }
+
+  .jobs-table--cards .action-cell:has(.row-actions:empty) {
+    display: none;
+  }
+
+  /* Kanban: columns scroll sideways and snap. */
+  .kanban-board {
+    display: flex;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    gap: 12px;
+    padding: 0 16px 8px;
+    margin: 0 -16px;
+    scroll-padding-left: 16px;
+  }
+
+  .kanban-col {
+    flex: 0 0 260px;
+    min-width: 260px;
+    scroll-snap-align: start;
+  }
+
+  /* The dialog is full screen. */
+  .drawer {
+    top: 0;
+    left: 0;
+    transform: none;
+    width: 100%;
+    height: 100%;
+    max-height: none;
+    border: none;
+    border-radius: 0;
+  }
+
+  /* Statistics: one column. */
+  .stat-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .timeline-label {
+    width: 64px;
+  }
+}
+

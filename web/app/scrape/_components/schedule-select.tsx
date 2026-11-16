@@ -56,8 +56,6 @@ export function ScheduleSelect({
           />
         )}
       </div>
-      <p className="hint">Times use server time.</p>
-      <p className="hint">Schedules run only while the server is running.</p>
     </>
   );
 }

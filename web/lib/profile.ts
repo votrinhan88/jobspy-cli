@@ -64,6 +64,14 @@ export function scrapeConfigPath(profile: string): string {
   return profilePath(profile, "scrape_config.json");
 }
 
+export function keywordsPath(profile: string): string {
+  return profilePath(profile, "keywords.txt");
+}
+
+export function dismissedBoardsPath(profile: string): string {
+  return profilePath(profile, "dismissed_boards.json");
+}
+
 export function scrapeStatusPath(profile: string): string {
   return profilePath(profile, "scrape_status.json");
 }

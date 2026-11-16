@@ -41,6 +41,7 @@ describe("SourceRunsTable", () => {
     render(<SourceRunsTable runs={RUNS} />);
 
     expect(screen.getByRole("columnheader", { name: "Source" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Sources" })).not.toBeInTheDocument();
     expect(screen.getByText("LinkedIn")).toBeInTheDocument();
     expect(screen.getByText("Indeed")).toBeInTheDocument();
     expect(screen.getByText("Google Jobs")).toBeInTheDocument();

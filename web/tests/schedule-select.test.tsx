@@ -28,10 +28,10 @@ describe("ScheduleSelect", () => {
     expect(onChange).toHaveBeenCalledWith(null);
   });
 
-  it("tells the user that schedules use server time and need a running server", () => {
-    render(<ScheduleSelect value={null} onChange={vi.fn()} />);
-    expect(screen.getByText(/times use server time/i)).toBeInTheDocument();
-    expect(screen.getByText(/only while the server is running/i)).toBeInTheDocument();
+  it("adds no explanatory prose under the schedule", () => {
+    render(<ScheduleSelect value={null} onChange={() => {}} />);
+    expect(screen.queryByText(/times use server time/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/only while the server is running/i)).not.toBeInTheDocument();
   });
 
   it("hides the cron input for presets", () => {

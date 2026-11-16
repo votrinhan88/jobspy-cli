@@ -1,362 +1,61 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import type { ScrapeConfig } from "@/lib/config";
-import type { ScrapeStatus } from "@/lib/scrape-status";
+import { useState } from "react";
+import type { DiscoveredBoard } from "@/lib/board-discovery";
 import { ScheduleSelect } from "@/app/scrape/_components/schedule-select";
 import { FetchDescriptionOption } from "@/app/scrape/_components/fetch-description-option";
 import { JobspyUpdateNotice } from "@/app/scrape/_components/jobspy-update-notice";
 import { SourceRunsTable } from "@/app/scrape/_components/source-runs-table";
-
-function formatDuration(started: string | null, finished: string | null): string {
-  if (!started || !finished) return "—";
-  const ms = new Date(finished).getTime() - new Date(started).getTime();
-  if (ms < 60000) return `${Math.round(ms / 1000)}s`;
-  return `${Math.round(ms / 60000)}m ${Math.round((ms % 60000) / 1000)}s`;
-}
-
-function RunHistory() {
-  const [history, setHistory] = useState<ScrapeStatus[]>([]);
-
-  useEffect(() => {
-    fetch("/api/scrape/history")
-      .then((r) => r.ok ? r.json() : [])
-      .then(setHistory)
-      .catch(() => {});
-  }, []);
-
-  if (history.length === 0) return null;
-
-  return (
-    <details className="log-spoiler" style={{ marginTop: 32 }}>
-      <summary>
-        <span className="log-chevron">&#9658;</span>
-        Run history
-        <span className="muted" style={{ marginLeft: 8, fontWeight: 400 }}>
-          ({history.length} runs)
-        </span>
-      </summary>
-      <div style={{ overflowX: "auto" }}>
-        <table className="history-table">
-          <thead>
-            <tr>
-              <th>Started</th>
-              <th>Duration</th>
-              <th>New</th>
-              <th>Total</th>
-              <th>Result</th>
-            </tr>
-          </thead>
-          <tbody>
-            {history.map((run, i) => (
-              <tr key={i}>
-                <td className="mono history-ts">
-                  {run.started_at ? new Date(run.started_at).toLocaleString() : "—"}
-                </td>
-                <td className="history-duration">
-                  {formatDuration(run.started_at, run.finished_at)}
-                </td>
-                <td className="mono">{run.new_jobs ?? "—"}</td>
-                <td className="mono">{run.total_jobs ?? "—"}</td>
-                <td>
-                  <span className={`status-chip status-chip--${run.status === "done" ? "offer" : run.status === "error" ? "rejected" : "none"}`}>
-                    {run.status}
-                  </span>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </details>
-  );
-}
-
-const PROVIDERS: { id: string; label: string }[] = [
-  { id: "greenhouse", label: "Greenhouse" },
-  { id: "lever",      label: "Lever" },
-  { id: "ashby",      label: "Ashby" },
-  { id: "workday",    label: "Workday" },
-];
-
-const SITES: { id: string; label: string; unavailable?: boolean }[] = [
-  { id: "linkedin",      label: "LinkedIn" },
-  { id: "indeed",        label: "Indeed" },
-  { id: "zip_recruiter", label: "ZipRecruiter" },
-  { id: "glassdoor",     label: "Glassdoor" },
-  { id: "google",        label: "Google Jobs (unavailable)", unavailable: true },
-];
-
-function LinesInput({
-  label,
-  values,
-  onChange,
-  onFlush,
-  placeholder,
-}: {
-  label: string;
-  values: string[];
-  onChange: (v: string[]) => void;
-  onFlush?: () => void;
-  placeholder?: string;
-}) {
-  function handleChange(raw: string) {
-    const lines = raw.split("\n").map((l) => l.trim()).filter(Boolean);
-    onChange(lines);
-  }
-
-  return (
-    <div className="form-field">
-      <label className="form-label">{label}</label>
-      <textarea
-        className="input input--textarea"
-        rows={10}
-        value={values.join("\n")}
-        onChange={(e) => handleChange(e.target.value)}
-        onBlur={onFlush}
-        placeholder={placeholder ?? "One per line"}
-      />
-    </div>
-  );
-}
-
-function StatusBanner({ status }: { status: ScrapeStatus | null }) {
-  if (!status || status.status === "idle") return null;
-
-  if (status.status === "running") {
-    return (
-      <div className="status-banner status-banner--running">
-        <span className="spinner" /> Scrape running…
-      </div>
-    );
-  }
-
-  if (status.status === "done") {
-    return (
-      <div className="status-banner status-banner--done">
-        <strong>Done.</strong> {status.new_jobs ?? 0} new &middot; {status.total_jobs ?? 0} total
-        {status.finished_at && (
-          <span className="status-ts">
-            {" "}&mdash; finished {new Date(status.finished_at).toLocaleTimeString()}
-          </span>
-        )}
-      </div>
-    );
-  }
-
-  if (status.status === "error") {
-    return (
-      <div className="status-banner status-banner--error">
-        <strong>Error:</strong> {status.error ?? "Unknown error"}
-      </div>
-    );
-  }
-
-  return null;
-}
-
-function parseProgress(log: string): { current: number; total: number } | null {
-  const matches = [...log.matchAll(/\[(\d+)\/(\d+)\]/g)];
-  if (!matches.length) return null;
-  const last = matches[matches.length - 1];
-  return { current: parseInt(last[1]), total: parseInt(last[2]) };
-}
-
-function ScrapeProgress({ log, isRunning }: { log: string; isRunning: boolean }) {
-  const progress = parseProgress(log);
-  if (!progress && !isRunning) return null;
-
-  const pct = progress ? Math.round((progress.current / progress.total) * 100) : 0;
-
-  return (
-    <div className="scrape-progress">
-      <div className="scrape-progress-bar-wrap">
-        <div
-          className="scrape-progress-bar"
-          style={{ width: `${pct}%` }}
-        />
-      </div>
-      <span className="scrape-progress-label">
-        {progress ? `${progress.current} / ${progress.total} pairs` : "Starting…"}
-      </span>
-    </div>
-  );
-}
-
-function LogSpoiler({ log, isRunning }: { log: string; isRunning: boolean }) {
-  const logRef = useRef<HTMLPreElement | null>(null);
-
-  useEffect(() => {
-    if (logRef.current) {
-      logRef.current.scrollTop = logRef.current.scrollHeight;
-    }
-  }, [log]);
-
-  return (
-    <details className="log-spoiler">
-      <summary>
-        <span className="log-chevron">&#9658;</span>
-        Show log
-        {isRunning && <span className="spinner" style={{ marginLeft: 6 }} />}
-      </summary>
-      <div className="log-body">
-        <pre className="log-pre" ref={logRef}>
-          {log || "(no output yet)"}
-        </pre>
-      </div>
-    </details>
-  );
-}
+import { SaveIcon, LoadIcon } from "@/app/scrape/_components/icons";
+import { LinesInput } from "@/app/scrape/_components/lines-input";
+import { RunHistory } from "@/app/scrape/_components/run-history";
+import { LogSpoiler, ScrapeProgress, StatusBanner } from "@/app/scrape/_components/run-output";
+import { PROVIDERS, SITES } from "@/app/scrape/_components/scrape-options";
+import { SuggestedBoards } from "@/app/scrape/_components/suggested-boards";
+import { SAVE_TEXT, useScrapeConfig } from "@/app/scrape/_components/use-scrape-config";
+import { useScrapeRun } from "@/app/scrape/_components/use-scrape-run";
 
 export default function ScrapePage() {
-  const [config, setConfig] = useState<ScrapeConfig | null>(null);
-  const [status, setStatus] = useState<ScrapeStatus | null>(null);
-  const [noProfile, setNoProfile] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [running, setRunning] = useState(false);
-  const [runError, setRunError] = useState<string | null>(null);
-  const [log, setLog] = useState("");
-  const [importNotif, setImportNotif] = useState<string | null>(null);
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
-  const logPollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
-  const configRef = useRef<ScrapeConfig | null>(null);
+  const { config, noProfile: noConfigProfile, saveState, update: updateConfig, flush: flushConfig } = useScrapeConfig();
+  const { status, log, runError, noProfile: noRunProfile, isRunning, run: runScrape } = useScrapeRun();
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [keywordsNotif, setKeywordsNotif] = useState<string | null>(null);
+  const noProfile = noConfigProfile || noRunProfile;
 
-  const fetchLog = useCallback(async () => {
-    const res = await fetch("/api/scrape/log");
-    if (res.ok) setLog(await res.text());
-  }, []);
+  function notifyKeywords(message: string) {
+    setKeywordsNotif(message);
+    setTimeout(() => setKeywordsNotif(null), 3000);
+  }
 
-  const stopLogPolling = useCallback(() => {
-    if (logPollTimer.current) {
-      clearInterval(logPollTimer.current);
-      logPollTimer.current = null;
-    }
-  }, []);
-
-  const startPolling = useCallback(() => {
-    if (pollTimer.current) return;
-    pollTimer.current = setInterval(async () => {
-      const res = await fetch("/api/scrape/status");
-      if (!res.ok) return;
-      const st: ScrapeStatus = await res.json();
-      setStatus(st);
-      if (st.status !== "running") {
-        clearInterval(pollTimer.current!);
-        pollTimer.current = null;
-        stopLogPolling();
-        setRunning(false);
-        fetchLog();
-      }
-    }, 5000);
-
-    if (logPollTimer.current) return;
-    logPollTimer.current = setInterval(fetchLog, 1000);
-  }, [fetchLog, stopLogPolling]);
-
-  useEffect(() => {
-    async function loadAll() {
-      const [cfgRes, stRes] = await Promise.all([
-        fetch("/api/scrape/config"),
-        fetch("/api/scrape/status"),
-      ]);
-      if (cfgRes.status === 400 || stRes.status === 400) {
-        setNoProfile(true);
-        return;
-      }
-      if (cfgRes.ok) setConfig(await cfgRes.json());
-      if (stRes.ok) {
-        const st: ScrapeStatus = await stRes.json();
-        setStatus(st);
-        if (st.status === "running") startPolling();
-      }
-      fetchLog();
-    }
-
-    loadAll();
-    return () => {
-      if (pollTimer.current) clearInterval(pollTimer.current);
-      if (logPollTimer.current) clearInterval(logPollTimer.current);
-    };
-  }, [fetchLog, startPolling]);
-
-  function updateConfig(patch: Partial<ScrapeConfig>) {
+  async function saveKeywords() {
     if (!config) return;
-    const next = { ...config, ...patch };
-    setConfig(next);
-    configRef.current = next;
-    if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => saveConfig(next), 800);
-  }
-
-  function flushConfig() {
-    if (!configRef.current) return;
-    if (saveTimer.current) {
-      clearTimeout(saveTimer.current);
-      saveTimer.current = null;
+    const res = await fetch("/api/keywords", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ keywords: config.job }),
+    });
+    if (!res.ok) {
+      notifyKeywords("Could not save job titles");
+      return;
     }
-    saveConfig(configRef.current);
+    const { keywords } = await res.json();
+    notifyKeywords(`${keywords.length} job title${keywords.length === 1 ? "" : "s"} saved`);
   }
 
-  async function saveConfig(cfg: ScrapeConfig) {
-    setSaving(true);
-    try {
-      const res = await fetch("/api/scrape/config", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(cfg),
-      });
-      if (res.ok) {
-        setSaveError(null);
-      } else {
-        const data = await res.json().catch(() => ({}));
-        setSaveError(data.error ?? "Could not save the configuration");
-      }
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function importKeywords() {
+  async function loadKeywords() {
     const res = await fetch("/api/keywords");
-    if (!res.ok) return;
+    if (res.status === 404) {
+      notifyKeywords("No saved job titles");
+      return;
+    }
+    if (!res.ok) {
+      notifyKeywords("Could not load job titles");
+      return;
+    }
     const { keywords } = await res.json();
     updateConfig({ job: keywords });
     flushConfig();
-    setImportNotif(`${keywords.length} keywords imported`);
-    setTimeout(() => setImportNotif(null), 3000);
-  }
-
-  async function runScrape() {
-    setRunError(null);
-    setRunning(true);
-    const res = await fetch("/api/scrape/run", { method: "POST" });
-    if (!res.ok) {
-      const data = await res.json();
-      setRunError(data.error ?? "Failed to start scrape");
-      setRunning(false);
-      return;
-    }
-    setStatus((s) => ({
-      ...(s ?? emptyStatus()),
-      status: "running",
-      started_at: new Date().toISOString(),
-    }));
-    startPolling();
-  }
-
-  function emptyStatus(): ScrapeStatus {
-    return {
-      status: "idle",
-      started_at: null,
-      finished_at: null,
-      new_jobs: null,
-      total_jobs: null,
-      error: null,
-      pid: null,
-      source_runs: [],
-    };
+    notifyKeywords(`${keywords.length} job title${keywords.length === 1 ? "" : "s"} loaded`);
   }
 
   if (noProfile) {
@@ -377,89 +76,47 @@ export default function ScrapePage() {
     return <div className="page-content"><p className="loading-row">Loading…</p></div>;
   }
 
-  const isRunning = running || status?.status === "running";
+  const runLabel = isRunning ? "Running…" : "Run scrape";
+  const advancedCount = [config.title_exclude, config.exclude_companies, config.companies].filter(
+    (list) => list.length > 0
+  ).length;
+
+  function addBoard(board: DiscoveredBoard) {
+    if (!config) return;
+    updateConfig({ companies: [...config.companies, `${board.entry}:${board.name}`] });
+    flushConfig();
+  }
 
   return (
     <div className="page-content">
       <header className="page-header page-header--row">
         <div>
           <h1 className="page-title">Scrape</h1>
-          <p className="page-subtitle">Configure and trigger a job scrape.</p>
         </div>
-        <div className="header-actions">
-          {saving && <span className="saving-indicator">Saving…</span>}
-          {saveError && <span className="run-error-inline">{saveError}</span>}
+      </header>
+
+      <JobspyUpdateNotice />
+
+      <fieldset className="settings-frame" role="group" aria-label="Scrape settings">
+        <div className="settings-head">
+          <h2 className="settings-title">Scrape settings</h2>
+          <span role="status" className={`save-state save-state--${saveState}`}>
+            {SAVE_TEXT[saveState]}
+            {saveState === "error" && (
+              <button type="button" className="link-btn" onClick={flushConfig}>
+                Retry
+              </button>
+            )}
+          </span>
           <button
             className="btn btn-primary"
             onClick={runScrape}
             disabled={isRunning}
           >
-            {isRunning ? "Running…" : "Run scrape"}
+            {runLabel}
           </button>
         </div>
-      </header>
-
-      <JobspyUpdateNotice />
-      <StatusBanner status={status} />
-      {status && status.status !== "running" && <SourceRunsTable runs={status.source_runs} />}
-      {runError && <div className="alert alert-error">{runError}</div>}
-      {isRunning && <ScrapeProgress log={log} isRunning={isRunning} />}
-
-      <LogSpoiler log={log} isRunning={isRunning} />
-
-      <div className="form-grid">
-        <div className="form-field">
-          <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-            <label className="form-label">Job titles</label>
-            <button
-              type="button"
-              className="btn btn-sm btn-secondary"
-              style={{ fontSize: 11, padding: "2px 8px" }}
-              onClick={importKeywords}
-            >
-              Import from keywords.txt
-            </button>
-            {importNotif && <span className="saving-indicator">{importNotif}</span>}
-          </div>
-          <textarea
-            className="input input--textarea"
-            rows={10}
-            value={config.job.join("\n")}
-            onChange={(e) => updateConfig({ job: e.target.value.split("\n").map((l) => l.trim()).filter(Boolean) })}
-            onBlur={flushConfig}
-            placeholder={"AI Engineer\nML Engineer\nData Scientist"}
-          />
-        </div>
-        <LinesInput
-          label="Locations"
-          values={config.location}
-          onChange={(v) => updateConfig({ location: v })}
-          onFlush={flushConfig}
-          placeholder={"Australia\nVietnam\nRemote"}
-        />
-
-        <div className="form-field">
-          <label className="form-label">Results per search</label>
-          <input
-            className="input input--sm"
-            type="number"
-            min={1}
-            max={100}
-            value={config.results_wanted}
-            onChange={(e) =>
-              updateConfig({ results_wanted: parseInt(e.target.value) || 20 })
-            }
-          />
-        </div>
-
-        <div className="form-field">
-          <label className="form-label">Schedule</label>
-          <ScheduleSelect
-            value={config.schedule}
-            onChange={(v) => updateConfig({ schedule: v })}
-          />
-        </div>
-
+        <div className="form-grid settings-grid">
         <div className="form-field form-field--full">
           <label className="form-label">Job sites</label>
           <div className="checkbox-group">
@@ -486,6 +143,94 @@ export default function ScrapePage() {
           </div>
         </div>
 
+        <div className="form-field">
+          <div className="form-field-head">
+            <label className="form-label" htmlFor="job-titles">Job titles</label>
+            <button
+              type="button"
+              className="icon-btn"
+              title="Save job titles to this profile"
+              aria-label="Save job titles"
+              onClick={saveKeywords}
+            >
+              <SaveIcon />
+            </button>
+            <button
+              type="button"
+              className="icon-btn"
+              title="Load the job titles saved for this profile"
+              aria-label="Load job titles"
+              onClick={loadKeywords}
+            >
+              <LoadIcon />
+            </button>
+            {keywordsNotif && <span className="saving-indicator">{keywordsNotif}</span>}
+          </div>
+          <textarea
+            id="job-titles"
+            className="input input--textarea"
+            rows={10}
+            value={config.job.join("\n")}
+            onChange={(e) => updateConfig({ job: e.target.value.split("\n").map((l) => l.trim()).filter(Boolean) })}
+            onBlur={flushConfig}
+            placeholder={"AI Engineer\nML Engineer\nData Scientist"}
+          />
+        </div>
+        <LinesInput
+          label="Locations"
+          values={config.location}
+          onChange={(v) => updateConfig({ location: v })}
+          onFlush={flushConfig}
+          placeholder={"Australia\nVietnam\nRemote"}
+        />
+
+        <div className="form-field">
+          <label className="form-label" htmlFor="results-wanted">Results per search</label>
+          <input
+            id="results-wanted"
+            className="input input--sm"
+            type="number"
+            min={1}
+            max={100}
+            value={config.results_wanted}
+            onChange={(e) =>
+              updateConfig({ results_wanted: parseInt(e.target.value) || 20 })
+            }
+          />
+        </div>
+
+        <div className="form-field">
+          <label className="form-label">Schedule</label>
+          <ScheduleSelect
+            value={config.schedule}
+            onChange={(v) => updateConfig({ schedule: v })}
+          />
+        </div>
+
+        <FetchDescriptionOption
+          checked={config.fetch_linkedin_description}
+          onChange={(v) => updateConfig({ fetch_linkedin_description: v })}
+        />
+        </div>
+
+        <div className="settings-advanced">
+          <button
+            type="button"
+            role="switch"
+            aria-checked={showAdvanced}
+            className="switch-row"
+            onClick={() => setShowAdvanced((v) => !v)}
+          >
+            <span className="switch-track" aria-hidden="true">
+              <span className="switch-knob" />
+            </span>
+            Advanced settings
+            <span className="muted" style={{ fontWeight: 400 }}>
+              {advancedCount} configured
+            </span>
+          </button>
+          <div role="group" aria-label="Advanced settings" hidden={!showAdvanced}>
+          <div className="form-grid advanced-grid">
         <div className="form-field form-field--full">
           <label className="form-label">ATS crawlers</label>
           <div className="checkbox-group">
@@ -506,11 +251,6 @@ export default function ScrapePage() {
             ))}
           </div>
         </div>
-
-        <FetchDescriptionOption
-          checked={config.fetch_linkedin_description}
-          onChange={(v) => updateConfig({ fetch_linkedin_description: v })}
-        />
 
         <LinesInput
           label="Exclude titles containing"
@@ -533,9 +273,30 @@ export default function ScrapePage() {
           onFlush={flushConfig}
           placeholder={"greenhouse:gitlab:GitLab\nlever:acme:Acme\nashby:ramp:Ramp\nworkday:nvidia.wd5/NVIDIAExternalCareerSite:NVIDIA"}
         />
-      </div>
+          </div>
+          <SuggestedBoards onAdd={addBoard} />
+          </div>
+        </div>
 
-      <RunHistory />
+        <div className="settings-foot">
+          <button
+            className="btn btn-primary"
+            onClick={runScrape}
+            disabled={isRunning}
+          >
+            {runLabel}
+          </button>
+        </div>
+      </fieldset>
+
+      <section className="scrape-output" role="region" aria-label="Scrape output">
+        <StatusBanner status={status} />
+        {runError && <div className="alert alert-error">{runError}</div>}
+        {isRunning && <ScrapeProgress log={log} isRunning={isRunning} />}
+        {status && status.status !== "running" && <SourceRunsTable runs={status.source_runs} />}
+        <LogSpoiler log={log} isRunning={isRunning} />
+        <RunHistory />
+      </section>
     </div>
   );
 }

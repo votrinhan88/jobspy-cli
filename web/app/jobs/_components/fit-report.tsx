@@ -29,7 +29,7 @@ async function getJson<T>(url: string): Promise<T> {
   return (await res.json()) as T;
 }
 
-export function FitReport({ jobId, tag }: { jobId: string; tag: string }) {
+export function FitReport({ jobId, tag, onApplied }: { jobId: string; tag: string; onApplied?: () => void }) {
   const [match, setMatch] = useState<MatchResponse | null>(null);
   const [matchFailed, setMatchFailed] = useState(false);
   const [analysis, setAnalysis] = useState<{ tag: string; data: TagAnalysis | null } | null>(null);
@@ -184,7 +184,7 @@ export function FitReport({ jobId, tag }: { jobId: string; tag: string }) {
           <div role="alert" className="alert alert-error">{postError.message}</div>
         )}
 
-        {data.saved && <ResultView saved={data.saved} />}
+        {data.saved && <ResultView saved={data.saved} tag={tag} onApplied={onApplied} />}
       </div>
     );
   }
@@ -222,12 +222,11 @@ export function FitReport({ jobId, tag }: { jobId: string; tag: string }) {
   );
 }
 
-function ResultView({ saved }: { saved: SavedAnalysis }) {
+function ResultView({ saved, tag, onApplied }: { saved: SavedAnalysis; tag: string; onApplied?: () => void }) {
   const a = saved.analysis;
   return (
     <div className="fit-result">
       <p className="fit-score">Fit score: {a.score}</p>
-      <p className="hint">This score shows how well the texts align. It does not predict a hiring result.</p>
       <p className="fit-words">{a.summary}</p>
 
       <h4 className="fit-title">Strengths</h4>
@@ -253,7 +252,7 @@ function ResultView({ saved }: { saved: SavedAnalysis }) {
         </>
       )}
 
-      {a.rewrites.length > 0 && <RewriteList rewrites={a.rewrites} />}
+      {a.rewrites.length > 0 && <RewriteList rewrites={a.rewrites} tag={tag} onApplied={onApplied} />}
 
       <p className="hint">
         {saved.model} · saved {saved.created_at.slice(0, 10)} · resume version {saved.resume_version}
@@ -291,8 +290,10 @@ function RequirementTable({ requirements }: { requirements: Requirement[] }) {
   );
 }
 
-function RewriteList({ rewrites }: { rewrites: Rewrite[] }) {
+function RewriteList({ rewrites, tag, onApplied }: { rewrites: Rewrite[]; tag: string; onApplied?: () => void }) {
   const [copied, setCopied] = useState<number | null>(null);
+  const [applied, setApplied] = useState<number[]>([]);
+  const [applyError, setApplyError] = useState<{ index: number; message: string } | null>(null);
 
   useEffect(() => {
     if (copied === null) return;
@@ -309,6 +310,22 @@ function RewriteList({ rewrites }: { rewrites: Rewrite[] }) {
     setCopied(index);
   }
 
+  async function apply(rw: Rewrite, index: number) {
+    setApplyError(null);
+    const res = await fetch(`/api/resumes/${encodeURIComponent(tag)}/apply`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ original: rw.original, suggested: rw.suggested }),
+    }).catch(() => null);
+    if (!res?.ok) {
+      const data = (await res?.json().catch(() => ({}))) as { error?: string } | undefined;
+      setApplyError({ index, message: data?.error ?? "The suggestion could not be applied." });
+      return;
+    }
+    setApplied((list) => [...list, index]);
+    onApplied?.();
+  }
+
   return (
     <>
       <h4 className="fit-title">Suggested wording</h4>
@@ -322,6 +339,16 @@ function RewriteList({ rewrites }: { rewrites: Rewrite[] }) {
                 Copy
               </button>
               {copied === i && <span className="hint">Copied</span>}
+              {applied.includes(i) ? (
+                <span className="hint">Applied</span>
+              ) : (
+                <button type="button" className="btn btn-primary btn-sm" onClick={() => apply(rw, i)}>
+                  Apply
+                </button>
+              )}
+              {applyError?.index === i && (
+                <div role="alert" className="alert alert-error">{applyError.message}</div>
+              )}
             </div>
           </li>
         ))}

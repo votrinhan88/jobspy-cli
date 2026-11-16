@@ -113,9 +113,10 @@ export function StatusMenu({ current, jobTitle, disabled, onSelect }: StatusMenu
           }
         }}
       >
-        Status
-        <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
-          <path d="M2 3.5l3 3 3-3" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="currentColor">
+          <circle cx="3" cy="8" r="1.5" />
+          <circle cx="8" cy="8" r="1.5" />
+          <circle cx="13" cy="8" r="1.5" />
         </svg>
       </button>
       {open && (

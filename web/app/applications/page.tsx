@@ -1,15 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import type { Job, JobStatus } from "@/lib/csv";
-import { formatLocation } from "@/lib/jobs-view";
-import { STATUSES, isActiveStatus, isArchivedStatus, isTrackedStatus, statusLabel } from "@/lib/status";
+import { groupByStatus } from "@/lib/kanban";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { Job } from "@/lib/csv";
+import { isActiveStatus, isTrackedStatus } from "@/lib/status";
 import type { StatusLogEntry } from "@/lib/status-log";
-import { buildGanttRows, type GanttData } from "@/lib/gantt";
-import { StatusMenu } from "@/components/status-menu";
+import { buildGanttRows } from "@/lib/gantt";
+import { latestCrawlAt } from "@/lib/lifecycle";
 import { useChangeStatus } from "@/components/use-change-status";
-
-const COLUMNS = STATUSES.filter((s) => s !== "");
+import { JobDialog } from "@/components/job-dialog";
+import { GanttView } from "@/app/applications/_components/gantt-view";
+import { KanbanView } from "@/app/applications/_components/kanban-view";
+import { TableView } from "@/app/applications/_components/table-view";
+import { COLUMNS } from "@/app/applications/_components/types";
 
 const VIEWS = ["kanban", "table", "gantt"] as const;
 type View = (typeof VIEWS)[number];
@@ -33,16 +36,6 @@ function storeView(view: View): void {
   }
 }
 
-// A shortcut for the usual next step only. Every other move is in the status menu.
-function primaryAction(status: JobStatus): { to: JobStatus; label: string } | null {
-  if (status === "shortlisted") return { to: "applied", label: "Mark applied" };
-  if (status === "applied") return { to: "interview", label: "Move to interview" };
-  if (status === "interview") return { to: "offer", label: "Got offer" };
-  return null;
-}
-
-type ChangeStatus = (job: Job, next: JobStatus) => void;
-
 export default function ApplicationsPage() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
@@ -54,6 +47,20 @@ export default function ApplicationsPage() {
     setJobs((prev) => prev.map((j) => (j.job_id === updated.job_id ? updated : j)));
   }, []);
   const { changeStatus, pending } = useChangeStatus(onUpdated);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const openerRef = useRef<HTMLElement | null>(null);
+  const selectedJob = selectedId ? jobs.find((j) => j.job_id === selectedId) ?? null : null;
+
+  function openJob(job: Job, opener: HTMLElement) {
+    openerRef.current = opener;
+    setSelectedId(job.job_id);
+  }
+
+  function closeJob() {
+    setSelectedId(null);
+    const opener = openerRef.current;
+    requestAnimationFrame(() => opener?.focus());
+  }
 
   useEffect(() => {
     async function load() {
@@ -105,10 +112,9 @@ export default function ApplicationsPage() {
 
   const tracked = jobs.filter((j) => isTrackedStatus(j.status));
   const activeCount = tracked.filter((j) => isActiveStatus(j.status)).length;
+  const acceptedCount = tracked.filter((j) => j.status === "accepted").length;
   const rejectedCount = tracked.filter((j) => j.status === "rejected").length;
-  const byStatus = Object.fromEntries(
-    COLUMNS.map((s) => [s, tracked.filter((j) => j.status === s)])
-  ) as Record<JobStatus, Job[]>;
+  const byStatus = groupByStatus(tracked, COLUMNS);
 
   return (
     <div className="page-content page-content--wide">
@@ -118,7 +124,7 @@ export default function ApplicationsPage() {
           <p className="page-subtitle">
             {loading
               ? ""
-              : `${activeCount} active application${activeCount !== 1 ? "s" : ""}, ${rejectedCount} rejected`}
+              : `${activeCount} active application${activeCount !== 1 ? "s" : ""}, ${acceptedCount} accepted, ${rejectedCount} rejected`}
           </p>
         </div>
         <div className="view-toggle" role="group" aria-label="View">
@@ -144,290 +150,22 @@ export default function ApplicationsPage() {
           <p className="empty-card-sub">Shortlist jobs from the <a href="/jobs" className="link">Jobs</a> page to start tracking.</p>
         </div>
       ) : view === "kanban" ? (
-        <KanbanView byStatus={byStatus} pending={pending} onChange={changeStatus} />
+        <KanbanView byStatus={byStatus} pending={pending} onChange={changeStatus} onOpen={openJob} />
       ) : view === "table" ? (
-        <TableView jobs={tracked} pending={pending} onChange={changeStatus} />
+        <TableView jobs={tracked} crawlAt={latestCrawlAt(jobs)} pending={pending} onChange={changeStatus} onOpen={openJob} />
       ) : log ? (
         <GanttView data={buildGanttRows(log.entries, tracked, log.now)} />
       ) : (
         <p className="loading-row">Loading…</p>
       )}
-    </div>
-  );
-}
-
-function KanbanView({
-  byStatus,
-  pending,
-  onChange,
-}: {
-  byStatus: Record<JobStatus, Job[]>;
-  pending: Set<string>;
-  onChange: ChangeStatus;
-}) {
-  const active = COLUMNS.filter((s) => !isArchivedStatus(s));
-  const archive = COLUMNS.filter((s) => isArchivedStatus(s) && isTrackedStatus(s));
-  const byId = new Map<string, Job>();
-  for (const list of Object.values(byStatus)) {
-    for (const job of list) byId.set(job.job_id, job);
-  }
-
-  function dropJob(jobId: string, status: JobStatus) {
-    const job = byId.get(jobId);
-    if (job && job.status !== status) onChange(job, status);
-  }
-
-  return (
-    <div>
-      <div className="kanban-board" aria-label="Active applications">
-        {active.map((col) => (
-          <KanbanColumn
-            key={col}
-            status={col}
-            jobs={byStatus[col]}
-            pending={pending}
-            onDropJob={(jobId) => dropJob(jobId, col)}
-          />
-        ))}
-      </div>
-      {archive.some((s) => byStatus[s].length > 0) && (
-        <div className="kanban-archive">
-          <p className="section-title">Rejected</p>
-          <div className="kanban-board kanban-board--archive" aria-label="Rejected applications">
-            {archive.map((col) => (
-              <KanbanColumn
-                key={col}
-                status={col}
-                jobs={byStatus[col]}
-                pending={pending}
-                onDropJob={(jobId) => dropJob(jobId, col)}
-              />
-            ))}
-          </div>
-        </div>
+      {selectedJob && (
+        <JobDialog
+          job={selectedJob}
+          busy={pending.has(selectedJob.job_id)}
+          onClose={closeJob}
+          onChange={changeStatus}
+        />
       )}
     </div>
-  );
-}
-
-function KanbanColumn({
-  status,
-  jobs,
-  pending,
-  onDropJob,
-}: {
-  status: JobStatus;
-  jobs: Job[];
-  pending: Set<string>;
-  onDropJob: (jobId: string) => void;
-}) {
-  const [over, setOver] = useState(false);
-  return (
-    <section
-      className={`kanban-col${over ? " kanban-col--over" : ""}`}
-      aria-label={`${statusLabel(status)}, ${jobs.length}`}
-      onDragOver={(e) => {
-        e.preventDefault();
-        e.dataTransfer.dropEffect = "move";
-        setOver(true);
-      }}
-      onDragLeave={() => setOver(false)}
-      onDrop={(e) => {
-        e.preventDefault();
-        setOver(false);
-        const jobId = e.dataTransfer.getData("text/plain");
-        if (jobId) onDropJob(jobId);
-      }}
-    >
-      <div className="kanban-col-header">
-        <span className={`status-chip status-chip--${status}`}>{statusLabel(status)}</span>
-        <span className="kanban-count">{jobs.length}</span>
-      </div>
-      <div className="kanban-cards">
-        {jobs.length === 0 ? (
-          <p className="kanban-empty">No jobs</p>
-        ) : (
-          jobs.map((job) => (
-            <JobCard key={job.job_id} job={job} busy={pending.has(job.job_id)} />
-          ))
-        )}
-      </div>
-    </section>
-  );
-}
-
-function CardActions({ job, busy, onChange }: { job: Job; busy: boolean; onChange: ChangeStatus }) {
-  const primary = primaryAction(job.status);
-  return (
-    <>
-      {primary && (
-        <button
-          type="button"
-          className="btn btn-sm btn-primary"
-          onClick={() => onChange(job, primary.to)}
-          disabled={busy}
-        >
-          {primary.label}
-        </button>
-      )}
-      <StatusMenu
-        current={job.status}
-        jobTitle={job.title || "job"}
-        disabled={busy}
-        onSelect={(s) => onChange(job, s)}
-      />
-    </>
-  );
-}
-
-function JobCard({ job, busy }: { job: Job; busy: boolean }) {
-  return (
-    <div
-      className="job-card"
-      draggable={!busy}
-      data-job-id={job.job_id}
-      onDragStart={(e) => {
-        e.dataTransfer.setData("text/plain", job.job_id);
-        e.dataTransfer.effectAllowed = "move";
-      }}
-    >
-      <a href={job.job_url} target="_blank" rel="noopener noreferrer" className="job-card-title">
-        {job.title}
-      </a>
-      <p className="job-card-company">{job.company}</p>
-      {job.location && <p className="job-card-location">{formatLocation(job)}</p>}
-    </div>
-  );
-}
-
-function TableView({ jobs, pending, onChange }: { jobs: Job[]; pending: Set<string>; onChange: ChangeStatus }) {
-  return (
-    <div className="table-wrap">
-      <table className="jobs-table">
-        <thead>
-          <tr>
-            <th>Title</th>
-            <th>Company</th>
-            <th>Location</th>
-            <th>Status</th>
-            <th>Updated</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {jobs.map((job) => (
-            <tr key={job.job_id}>
-              <td className="job-title-cell">
-                <a href={job.job_url} target="_blank" rel="noopener noreferrer" className="job-link">
-                  {job.title}
-                </a>
-              </td>
-              <td>{job.company}</td>
-              <td className="muted">{formatLocation(job) || "—"}</td>
-              <td>
-                <span className={`status-chip status-chip--${job.status}`}>{statusLabel(job.status)}</span>
-              </td>
-              <td className="muted mono">
-                {job.status_updated_at ? new Date(job.status_updated_at).toLocaleDateString() : "—"}
-              </td>
-              <td>
-                <div className="row-actions">
-                  <CardActions job={job} busy={pending.has(job.job_id)} onChange={onChange} />
-                </div>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-const DAY_MS = 24 * 60 * 60 * 1000;
-const PX_PER_DAY = 22;
-
-function shortDate(ms: number): string {
-  return new Date(ms).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
-}
-
-function mondayOnOrBefore(ms: number): number {
-  const d = new Date(ms);
-  d.setHours(0, 0, 0, 0);
-  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
-  return d.getTime();
-}
-
-function GanttView({ data }: { data: GanttData }) {
-  if (data.rows.length === 0 || data.min === null || data.max === null) {
-    return (
-      <div className="empty-card">
-        <p className="empty-card-text">No status history yet.</p>
-        <p className="empty-card-sub">
-          Shortlist jobs from the <a href="/jobs" className="link">Jobs</a> page. Each status change adds a bar here.
-        </p>
-      </div>
-    );
-  }
-
-  const start = mondayOnOrBefore(data.min);
-  const end = Math.max(data.max, start + 7 * DAY_MS);
-  const width = Math.max(640, Math.ceil(((end - start) / DAY_MS) * PX_PER_DAY));
-  const x = (ms: number) => ((ms - start) / (end - start)) * width;
-  const ticks: number[] = [];
-  for (let t = start; t <= end; t += 7 * DAY_MS) ticks.push(t);
-
-  return (
-    <section className="gantt" aria-label="Status history by job">
-      <div className="gantt-legend" aria-hidden="true">
-        {COLUMNS.map((s) => (
-          <span key={s} className="gantt-legend-item">
-            <span className={`status-dot status-dot--${s}`} />
-            {statusLabel(s)}
-          </span>
-        ))}
-      </div>
-      <div className="gantt-scroll">
-        <div className="gantt-grid" style={{ ["--gantt-width" as string]: `${width}px` }}>
-          <div className="gantt-axis">
-            <div className="gantt-label gantt-label--axis">Job</div>
-            <div className="gantt-track" aria-hidden="true">
-              {ticks.map((t) => (
-                <span key={t} className="gantt-tick" style={{ left: x(t) }}>
-                  {shortDate(t)}
-                </span>
-              ))}
-            </div>
-          </div>
-          <ul className="gantt-rows">
-            {data.rows.map((row) => (
-              <li key={row.job_id} className="gantt-row">
-                <div className="gantt-label">
-                  <span className="gantt-title">{row.title}</span>
-                  <span className="gantt-company">{row.company}</span>
-                </div>
-                <div className="gantt-track">
-                  {ticks.map((t) => (
-                    <span key={t} className="gantt-gridline" style={{ left: x(t) }} aria-hidden="true" />
-                  ))}
-                  {row.segments.map((seg) => {
-                    const label = `${statusLabel(seg.status)}, ${shortDate(seg.start)} to ${shortDate(seg.end)}`;
-                    return (
-                      <span
-                        key={`${seg.status}-${seg.start}`}
-                        role="img"
-                        aria-label={label}
-                        title={label}
-                        className={`gantt-bar gantt-bar--${seg.status}`}
-                        style={{ left: x(seg.start), width: Math.max(3, x(seg.end) - x(seg.start)) }}
-                      />
-                    );
-                  })}
-                </div>
-              </li>
-            ))}
-          </ul>
-        </div>
-      </div>
-    </section>
   );
 }

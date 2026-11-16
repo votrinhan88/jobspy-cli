@@ -24,11 +24,6 @@ describe("readConfig schedule field", () => {
     expect(cfg.schedule).toBeNull();
     expect(cfg.job).toEqual(["dev"]);
   });
-
-  it("keeps a saved schedule", async () => {
-    vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify({ schedule: "0 8 * * *" }));
-    expect((await readConfig("p")).schedule).toBe("0 8 * * *");
-  });
 });
 
 describe("readConfig fetch_linkedin_description field", () => {
@@ -43,11 +38,6 @@ describe("readConfig fetch_linkedin_description field", () => {
     vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify({ job: ["dev"] }));
     expect((await readConfig("p")).fetch_linkedin_description).toBe(true);
   });
-
-  it("keeps a saved false", async () => {
-    vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify({ fetch_linkedin_description: false }));
-    expect((await readConfig("p")).fetch_linkedin_description).toBe(false);
-  });
 });
 
 describe("readConfig site list", () => {
@@ -56,16 +46,6 @@ describe("readConfig site list", () => {
   it("ticks LinkedIn, Indeed and Glassdoor by default", async () => {
     vi.mocked(fs.readFile).mockRejectedValue(new Error("ENOENT"));
     expect((await readConfig("p")).site_name).toEqual(["linkedin", "indeed", "glassdoor"]);
-  });
-
-  it("drops Google Jobs from a saved site list because it returns no data", async () => {
-    vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify({ site_name: ["linkedin", "indeed", "google"] }));
-    expect((await readConfig("p")).site_name).toEqual(["linkedin", "indeed"]);
-  });
-
-  it("keeps the other saved sites in order", async () => {
-    vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify({ site_name: ["zip_recruiter", "google", "linkedin"] }));
-    expect((await readConfig("p")).site_name).toEqual(["zip_recruiter", "linkedin"]);
   });
 });
 

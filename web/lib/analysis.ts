@@ -190,28 +190,31 @@ export function parseAnalysis(text: string): Analysis | null {
   }
 }
 
-type FetchLike = (url: string, init: RequestInit) => Promise<Response>;
+export type FetchLike = (url: string, init: RequestInit) => Promise<Response>;
 
 function chatCompletionsUrl(baseUrl: string): string {
   return `${baseUrl.replace(/\/+$/, "")}/chat/completions`;
 }
 
-export async function runAnalysis({
-  job,
-  resumeText,
+export type ModelReply = { ok: true; text: string } | { ok: false; error: string };
+
+export async function callModel({
+  system,
+  user,
   apiKey,
   model,
   baseUrl,
+  maxTokens = MAX_TOKENS,
   fetchImpl = fetch as FetchLike,
 }: {
-  job: JobText;
-  resumeText: string;
+  system: string;
+  user: string;
   apiKey: string;
   model: string;
   baseUrl?: string;
+  maxTokens?: number;
   fetchImpl?: FetchLike;
-}): Promise<AnalysisResult> {
-  const { system, user } = buildMessages(job, resumeText);
+}): Promise<ModelReply> {
   const local = Boolean(baseUrl);
   let response: Response;
   try {
@@ -231,7 +234,7 @@ export async function runAnalysis({
         local
           ? {
               model,
-              max_tokens: MAX_TOKENS,
+              max_tokens: maxTokens,
               temperature: 0,
               messages: [
                 { role: "system", content: system },
@@ -240,7 +243,7 @@ export async function runAnalysis({
             }
           : {
               model,
-              max_tokens: MAX_TOKENS,
+              max_tokens: maxTokens,
               system,
               messages: [{ role: "user", content: user }],
             }
@@ -275,7 +278,24 @@ export async function runAnalysis({
     };
   }
 
-  const analysis = parseAnalysis(local ? openAiText(body) : anthropicText(body));
+  return { ok: true, text: local ? openAiText(body) : anthropicText(body) };
+}
+
+export async function runAnalysis({
+  job,
+  resumeText,
+  ...rest
+}: {
+  job: JobText;
+  resumeText: string;
+  apiKey: string;
+  model: string;
+  baseUrl?: string;
+  fetchImpl?: FetchLike;
+}): Promise<AnalysisResult> {
+  const reply = await callModel({ ...buildMessages(job, resumeText), ...rest });
+  if (!reply.ok) return reply;
+  const analysis = parseAnalysis(reply.text);
   if (!analysis) return { ok: false, error: UNREADABLE_REPLY };
   return { ok: true, analysis };
 }

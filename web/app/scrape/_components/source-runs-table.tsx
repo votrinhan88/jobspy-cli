@@ -30,7 +30,6 @@ export function SourceRunsTable({ runs }: { runs: SourceRunStatus[] }) {
 
   return (
     <section style={{ marginTop: 24 }}>
-      <h2 className="form-label">Sources</h2>
       <div style={{ overflowX: "auto" }}>
         <table className="history-table">
           <thead>

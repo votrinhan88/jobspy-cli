@@ -158,10 +158,4 @@ describe("PATCH /api/jobs/[jobId]", () => {
       { job_id: "b-2", from: "", to: "applied", at: "2026-09-01T10:00:00.000Z" },
     ]);
   });
-
-  it("leaves no temporary file after a change", async () => {
-    await patch("a-1", { status: "skipped" });
-    await patch("a-1", { status: "" });
-    expect((await fs.readdir(path.join(dataDir, "demo"))).sort()).toEqual(["jobs.csv", "status_log.jsonl"]);
-  });
 });

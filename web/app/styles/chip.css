@@ -1,0 +1,31 @@
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--app-ink-muted);
+  background: var(--app-panel);
+  border: 1px solid var(--app-border);
+  border-radius: 99px;
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s, border-color 0.1s;
+}
+
+.filter-chip:hover {
+  color: var(--app-ink);
+  border-color: var(--app-ink-muted);
+}
+
+.filter-chip[aria-pressed="true"] {
+  color: var(--app-accent);
+  background: color-mix(in srgb, var(--app-accent) 8%, var(--app-panel));
+  border-color: color-mix(in srgb, var(--app-accent) 45%, transparent);
+}
+
+.filter-chip-count {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}

@@ -24,6 +24,8 @@ export default function ReviewPage({ params }: { params: Promise<{ jobId: string
   const [jobId, setJobId] = useState<string | null>(null);
   const [state, setState] = useState<PageState>(null);
   const [picked, setPicked] = useState<string | null>(null);
+  const [editedTags, setEditedTags] = useState<string[]>([]);
+  const [revision, setRevision] = useState(0);
 
   // Unwrapping with use() suspends forever under the test renderer, so the promise is awaited in an effect.
   useEffect(() => {
@@ -63,6 +65,11 @@ export default function ReviewPage({ params }: { params: Promise<{ jobId: string
       cancelled = true;
     };
   }, [jobId]);
+
+  function markEdited(tag: string) {
+    setEditedTags((list) => (list.includes(tag) ? list : [...list, tag]));
+    setRevision((n) => n + 1);
+  }
 
   if (jobId === null || state === null) {
     return <div className="page-content"><p className="loading-row">Loading…</p></div>;
@@ -105,10 +112,10 @@ export default function ReviewPage({ params }: { params: Promise<{ jobId: string
       {chosen ? (
         <div className="review-layout">
           <section>
-            <ResumeViewer tag={chosen.tag} ext={chosen.ext} />
+            <ResumeViewer tag={chosen.tag} ext={chosen.ext} edited={chosen.edited || editedTags.includes(chosen.tag)} revision={revision} />
           </section>
           <section>
-            <FitReport jobId={jobId} tag={chosen.tag} />
+            <FitReport jobId={jobId} tag={chosen.tag} onApplied={() => markEdited(chosen.tag)} />
           </section>
         </div>
       ) : (

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildSankey, type FlowEntry } from "@/lib/sankey";
-import { findBandOverlaps, layoutSankey } from "@/lib/sankey-layout";
+import { bandPath, findBandOverlaps, layoutSankey } from "@/lib/sankey-layout";
 import type { JobStatus } from "@/lib/csv";
 
 function job(id: string, ...stages: JobStatus[]): FlowEntry[] {
@@ -34,7 +34,7 @@ describe("layoutSankey", () => {
     const second = layout.links.find((l) => l.source.id === "shortlisted" && l.target.id === "applied")!;
     expect(first.value).toBe(3);
     expect(second.value).toBe(1);
-    expect(first.width).toBeGreaterThan(second.width);
+    expect(first.targetWidth).toBeGreaterThan(second.targetWidth);
   });
 
   it("scales the bands by the square root of the count, so a small stage stays visible next to a big one", () => {
@@ -186,7 +186,7 @@ describe("layoutSankey", () => {
       }
       const inc = layout.links.filter((l) => l.target === node).sort((a, b) => a.y1 - b.y1);
       for (let i = 1; i < inc.length; i++) {
-        expect(inc[i].y1 - inc[i].width / 2).toBeGreaterThanOrEqual(inc[i - 1].y1 + inc[i - 1].width / 2 - 1e-6);
+        expect(inc[i].y1 - inc[i].targetWidth / 2).toBeGreaterThanOrEqual(inc[i - 1].y1 + inc[i - 1].targetWidth / 2 - 1e-6);
       }
     }
   });
@@ -246,7 +246,52 @@ describe("layoutSankey", () => {
     const drop = layout.links.find((l) => l.source.id === "shortlisted" && l.target.id === "skipped")!;
     expect(forward.y0 - forward.width / 2).toBeCloseTo(stage.y0);
     expect(drop.y0 + drop.width / 2).toBeCloseTo(stage.y1);
-    expect(forward.y0 + forward.width / 2).toBeLessThan(drop.y0 - drop.width / 2);
+    expect(forward.y0 + forward.width / 2).toBeLessThanOrEqual(drop.y0 - drop.width / 2 + 1e-6);
+  });
+
+  it("gives an arriving band the width of its square root, and sizes a stage by the sum of its arrivals", () => {
+    const g = buildSankey([
+      ...job("a", "", "shortlisted", "applied"),
+      ...job("b", "", "shortlisted", "applied"),
+      ...job("c", "", "shortlisted", "applied"),
+      ...job("d", "", "shortlisted", "applied"),
+      ...job("e", "", "shortlisted", "interview"),
+    ]);
+    const layout = layoutSankey(g, { width: 720, height: 320 });
+    for (const node of layout.nodes) {
+      const incoming = layout.links.filter((l) => l.target === node);
+      if (incoming.length === 0) continue;
+      const filled = incoming.reduce((sum, l) => sum + l.targetWidth, 0);
+      expect(filled, node.id).toBeCloseTo(node.y1 - node.y0);
+      const unit = incoming[0].targetWidth / Math.sqrt(incoming[0].value);
+      for (const l of incoming) expect(l.targetWidth / Math.sqrt(l.value)).toBeCloseTo(unit);
+    }
+  });
+
+  it("scales the leaving bands so that together they fill the stage", () => {
+    const g = buildSankey([
+      ...job("a", "", "shortlisted", "applied"),
+      ...job("b", "", "shortlisted", "applied"),
+      ...job("c", "", "shortlisted", "applied"),
+      ...job("d", "", "shortlisted", "applied"),
+      ...job("e", "", "shortlisted", "interview"),
+      ...job("p0", "", "shortlisted"),
+      ...job("p1", "", "shortlisted"),
+      ...job("p2", "", "shortlisted"),
+      ...job("p3", "", "shortlisted"),
+      ...job("p4", "", "shortlisted"),
+      ...job("p5", "", "shortlisted"),
+      ...job("p6", "", "shortlisted"),
+      ...job("p7", "", "shortlisted"),
+      ...job("p8", "", "shortlisted"),
+      ...job("p9", "", "shortlisted"),
+    ]);
+    const layout = layoutSankey(g, { width: 720, height: 320 });
+    const stage = layout.nodes.find((n) => n.id === "shortlisted")!;
+    const leaving = layout.links.filter((l) => l.source === stage);
+    expect(leaving.reduce((sum, l) => sum + l.width, 0)).toBeCloseTo(stage.y1 - stage.y0);
+    const [first, second] = leaving;
+    expect(first.width / second.width).toBeCloseTo(Math.sqrt(first.value) / Math.sqrt(second.value));
   });
 
   it("returns empty arrays for an empty graph", () => {
@@ -255,5 +300,16 @@ describe("layoutSankey", () => {
       links: [],
       height: 60,
     });
+  });
+});
+
+describe("bandPath", () => {
+  it("outlines a band between its two edges, closed", () => {
+    const layout = layoutSankey(graph, { width: 300, height: 320 });
+    const link = layout.links[0];
+    const d = bandPath(link);
+    expect(d.startsWith(`M${link.source.x1},${link.y0 - link.width / 2}`)).toBe(true);
+    expect(d).toContain(`L${link.target.x0},${link.y1 + link.targetWidth / 2}`);
+    expect(d.endsWith("Z")).toBe(true);
   });
 });

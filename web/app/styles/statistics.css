@@ -1,0 +1,173 @@
+/* ── Statistics page ──────────────────────────────────────────────────── */
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 40px;
+}
+
+.stat-card {
+  padding: 18px 20px;
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  background: var(--app-panel);
+}
+
+.stat-value {
+  font-size: var(--text-4xl);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--app-ink);
+  line-height: 1.1;
+}
+
+.stat-label {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--app-ink-muted);
+  margin-top: 6px;
+}
+
+.stat-card--accent .stat-value {
+  color: var(--app-accent);
+}
+
+.stat-card--offer .stat-value {
+  color: #059669;
+}
+
+.stat-card--rejected .stat-value {
+  color: #b91c1c;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .stat-card--offer .stat-value {
+    color: #6ee7b7;
+  }
+  :root:not([data-theme="light"]) .stat-card--rejected .stat-value {
+    color: #fca5a5;
+  }
+}
+
+:root[data-theme="dark"] .stat-card--offer .stat-value {
+  color: #6ee7b7;
+}
+
+:root[data-theme="dark"] .stat-card--rejected .stat-value {
+  color: #fca5a5;
+}
+
+/* ── Timeline ─────────────────────────────────────────────────────────── */
+
+.timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.timeline-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.timeline-label {
+  width: 88px;
+  flex-shrink: 0;
+  font-size: var(--text-sm);
+  color: var(--app-ink-muted);
+  text-align: right;
+}
+
+.timeline-track {
+  flex: 1;
+  height: 18px;
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.timeline-bar {
+  height: 100%;
+  border-radius: 3px;
+  min-width: 2px;
+  background: color-mix(in srgb, var(--app-accent) 30%, transparent);
+}
+
+.timeline-count {
+  width: 28px;
+  text-align: right;
+  font-size: var(--text-md);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--app-ink);
+  flex-shrink: 0;
+}
+
+/* ── Breakdown lists ──────────────────────────────────────────────────── */
+
+.breakdown-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.top-card {
+  padding: 16px 18px;
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  background: var(--app-panel);
+}
+
+.top-title {
+  font-size: var(--text-md);
+  font-weight: 600;
+  color: var(--app-ink);
+  margin: 0 0 12px;
+}
+
+.top-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.top-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: var(--text-md);
+}
+
+.top-name {
+  color: var(--app-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.top-count {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--app-ink-muted);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+@media (max-width: 720px) {
+  .stat-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .breakdown-grid {
+    grid-template-columns: 1fr;
+  }
+}
+

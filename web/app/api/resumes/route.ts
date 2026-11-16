@@ -46,7 +46,8 @@ export async function POST(request: NextRequest) {
   if (file instanceof File) {
     result = await importFile(profile, tag, file.name, new Uint8Array(await file.arrayBuffer()));
   } else if (typeof text === "string" && text !== "") {
-    result = await importText(profile, tag, text);
+    const parent = form.get("parent");
+    result = await importText(profile, tag, text, typeof parent === "string" ? parent : undefined);
   } else {
     return Response.json(NO_INPUT, { status: 400 });
   }

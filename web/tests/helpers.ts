@@ -85,8 +85,18 @@ export function params<T extends Record<string, string>>(value: T) {
   return { params: Promise.resolve(value) };
 }
 
+export interface PdfTextLine {
+  text: string;
+  size: number;
+  y: number;
+}
+
 export function tinyPdf(text: string): Uint8Array<ArrayBuffer> {
-  const stream = `BT /F1 12 Tf 72 720 Td (${text}) Tj ET`;
+  return pdfWithLines([{ text, size: 12, y: 720 }]);
+}
+
+export function pdfWithLines(lines: PdfTextLine[]): Uint8Array<ArrayBuffer> {
+  const stream = lines.map((l) => `BT /F1 ${l.size} Tf 72 ${l.y} Td (${l.text}) Tj ET`).join("\n");
   const objects = [
     "<< /Type /Catalog /Pages 2 0 R >>",
     "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",

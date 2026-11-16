@@ -1,5 +1,6 @@
 import path from "path";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
+import { type PdfItem, structurePdf } from "@/lib/resumes/pdf-structure";
 
 const SUPPORTED_EXTENSIONS = new Set(["pdf", "tex", "md", "txt"]);
 
@@ -48,17 +49,29 @@ async function extractPdfText(bytes: Uint8Array): Promise<string> {
   try {
     const document = await task.promise;
     const pages: string[] = [];
+    const placed: PdfItem[][] = [];
     for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber++) {
       const page = await document.getPage(pageNumber);
       const content = await page.getTextContent();
       let pageText = "";
+      const pageItems: PdfItem[] = [];
       for (const item of content.items) {
         if (!("str" in item)) continue;
+        pageItems.push({
+          str: item.str,
+          x: item.transform[4],
+          y: item.transform[5],
+          size: Math.hypot(item.transform[0], item.transform[1]) || item.height,
+          width: item.width,
+        });
         pageText += item.str;
         if (item.hasEOL) pageText += "\n";
       }
       pages.push(pageText);
+      placed.push(pageItems);
     }
+    const structured = structurePdf(placed);
+    if (structured) return normalizeText(structured);
     const lines = pages
       .join("\n\n")
       .split("\n")

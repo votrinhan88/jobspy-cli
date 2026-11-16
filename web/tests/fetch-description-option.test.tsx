@@ -23,9 +23,4 @@ describe("FetchDescriptionOption", () => {
     expect(onChange).toHaveBeenCalledWith(true);
   });
 
-  it("warns that scrapes are slower and says what the option is for", () => {
-    render(<FetchDescriptionOption checked onChange={vi.fn()} />);
-    expect(screen.getByText(/slower/i)).toBeInTheDocument();
-    expect(screen.getByText(/resume/i)).toBeInTheDocument();
-  });
 });

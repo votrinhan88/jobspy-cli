@@ -22,7 +22,6 @@ import {
   unregisterSchedule,
   getRegisteredProfiles,
   registerAllSchedules,
-  isValidSchedule,
 } from "@/lib/scheduler";
 
 type Tick = () => Promise<void>;
@@ -32,14 +31,6 @@ beforeEach(() => {
   getRegisteredProfiles().forEach(unregisterSchedule);
   vi.clearAllMocks();
   startScrape.mockResolvedValue({ started: true });
-});
-
-describe("isValidSchedule", () => {
-  it("delegates to node-cron validate", () => {
-    validate.mockReturnValue(false);
-    expect(isValidSchedule("nope")).toBe(false);
-    expect(validate).toHaveBeenCalledWith("nope");
-  });
 });
 
 describe("registerSchedule", () => {

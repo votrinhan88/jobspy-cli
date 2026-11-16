@@ -3,7 +3,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import JobsPage from "@/app/jobs/page";
 
-const RUN_STARTED_AT = "2026-09-15T12:00:00Z";
+const NOW = "2026-09-15T14:00:00Z";
 
 function job(overrides: Record<string, string> = {}) {
   return {
@@ -26,32 +26,29 @@ function job(overrides: Record<string, string> = {}) {
 let jobs: ReturnType<typeof job>[] = [];
 
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date(NOW));
   jobs = [];
   vi.stubGlobal(
     "fetch",
-    vi.fn(async (input: RequestInfo | URL) => {
-      if (String(input).includes("/api/scrape/status")) {
-        return { ok: true, status: 200, json: async () => ({ started_at: RUN_STARTED_AT }) };
-      }
+    vi.fn(async () => {
       return { ok: true, status: 200, json: async () => jobs };
     })
   );
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
 describe("Jobs New marker", () => {
-  it("marks a job first seen in the latest run as New", async () => {
+  const CRAWL = "2026-09-15T13:00:00Z";
+
+  it("marks a job first seen in the latest crawl as New", async () => {
     jobs = [
-      job(),
-      job({
-        job_id: "job-2",
-        title: "Old Job",
-        first_seen_at: "2026-08-01T00:00:00Z",
-        last_seen_at: "2026-09-15T13:00:00Z",
-      }),
+      job({ first_seen_at: CRAWL, last_seen_at: CRAWL }),
+      job({ job_id: "job-2", title: "Old Job", first_seen_at: "2026-09-14T13:00:00Z", last_seen_at: CRAWL }),
     ];
 
     render(<JobsPage />);
@@ -63,8 +60,18 @@ describe("Jobs New marker", () => {
     expect(within(newRow).getByText("Untriaged")).toHaveClass("sr-only");
   });
 
+  it("marks nothing as New when the latest crawl found nothing new", async () => {
+    jobs = [job({ first_seen_at: "2026-09-14T13:00:00Z", last_seen_at: CRAWL })];
+
+    render(<JobsPage />);
+
+    const row = (await screen.findByText("New Job")).closest("tr")!;
+    expect(within(row).queryByText("NEW")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "New 0" })).toBeInTheDocument();
+  });
+
   it("shows no status chip for an untriaged row", async () => {
-    jobs = [job()];
+    jobs = [job({ first_seen_at: CRAWL, last_seen_at: CRAWL })];
 
     render(<JobsPage />);
 
@@ -79,27 +86,24 @@ describe("Jobs New marker", () => {
 
     render(<JobsPage />);
 
+    await userEvent.click(await screen.findByRole("button", { name: /^All/ }));
     const row = (await screen.findByText("New Job")).closest("tr")!;
     expect(within(row).getByText("Applied")).toHaveClass("status-chip");
   });
 
-  it("filters to New jobs", async () => {
+  it("filters to jobs first seen in the latest crawl", async () => {
     jobs = [
-      job(),
-      job({
-        job_id: "job-2",
-        title: "Old Job",
-        first_seen_at: "2026-08-01T00:00:00Z",
-        last_seen_at: "2026-09-15T13:00:00Z",
-      }),
+      job({ first_seen_at: CRAWL, last_seen_at: CRAWL }),
+      job({ job_id: "job-3", title: "Week Job", first_seen_at: "2026-09-10T00:00:00Z", last_seen_at: CRAWL }),
+      job({ job_id: "job-2", title: "Old Job", first_seen_at: "2026-08-01T00:00:00Z", last_seen_at: CRAWL }),
     ];
 
     render(<JobsPage />);
 
     await screen.findByText("New Job");
-    await userEvent.click(screen.getByRole("button", { name: "New jobs" }));
-
+    await userEvent.click(screen.getByRole("button", { name: "New 1" }));
     expect(screen.getByText("New Job")).toBeInTheDocument();
+    expect(screen.queryByText("Week Job")).not.toBeInTheDocument();
     expect(screen.queryByText("Old Job")).not.toBeInTheDocument();
   });
 });

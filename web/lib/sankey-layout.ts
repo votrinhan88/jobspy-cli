@@ -21,6 +21,7 @@ export interface LayoutLink {
   target: LayoutNode;
   value: number;
   width: number;
+  targetWidth: number;
   y0: number;
   y1: number;
 }
@@ -73,14 +74,19 @@ export function layoutSankey(graph: FlowGraph, size: LayoutSize): SankeyLayout {
     outCount.set(link.source, (outCount.get(link.source) ?? 0) + link.value);
     inCount.set(link.target, (inCount.get(link.target) ?? 0) + link.value);
   }
-  // A node is as tall as the larger of its incoming and outgoing flow. Pending jobs take the
-  // rest of an incoming-heavy node as its empty middle, so in equals out plus pending.
-  const nodeWeight = new Map(
+  // A band has a width at each end. The arriving end is sqrt(count). A node is as tall as the
+  // sum of its arriving ends, or of its leaving ends when nothing arrives. The leaving ends are
+  // scaled by the same factor so that together they fill the node.
+  const nodeWeight = new Map<string, number>(
     graph.nodes.map((node) => [
       node.id,
-      Math.max(inWeight.get(node.id) ?? 0, outWeight.get(node.id) ?? 0),
+      (inWeight.get(node.id) ?? 0) > 0 ? inWeight.get(node.id)! : (outWeight.get(node.id) ?? 0),
     ])
   );
+  const leavingScale = (id: string) => {
+    const out = outWeight.get(id) ?? 0;
+    return out > 0 ? nodeWeight.get(id)! / out : 1;
+  };
 
   const columns = new Map<number, FlowNode[]>();
   for (const node of graph.nodes) {
@@ -164,7 +170,8 @@ export function layoutSankey(graph: FlowGraph, size: LayoutSize): SankeyLayout {
       source: byId.get(link.source)!,
       target: byId.get(link.target)!,
       value: link.value,
-      width: weight(link.value) * unit,
+      width: weight(link.value) * leavingScale(link.source) * unit,
+      targetWidth: weight(link.value) * unit,
       index,
       y0: 0,
       y1: 0,
@@ -197,8 +204,8 @@ export function layoutSankey(graph: FlowGraph, size: LayoutSize): SankeyLayout {
         group.sort((a, b) => a.source.y0 - b.source.y0 || a.index - b.index);
         let top = node.y0;
         for (const d of group) {
-          d.y1 = top + d.width / 2;
-          top += d.width;
+          d.y1 = top + d.targetWidth / 2;
+          top += d.targetWidth;
         }
       }
     };
@@ -212,11 +219,12 @@ export function layoutSankey(graph: FlowGraph, size: LayoutSize): SankeyLayout {
     stackLeaving(leaving);
     stackArriving(arriving);
 
-    const links: LayoutLink[] = drafts.map(({ source, target, value, width, y0, y1 }) => ({
+    const links: LayoutLink[] = drafts.map(({ source, target, value, width, targetWidth, y0, y1 }) => ({
       source,
       target,
       value,
       width,
+      targetWidth,
       y0,
       y1,
     }));
@@ -246,6 +254,24 @@ function bandPoint(link: LayoutLink, t: number): { x: number; y: number } {
   return { x, y };
 }
 
+export function bandPath(link: LayoutLink): string {
+  const x0 = link.source.x1;
+  const x1 = link.target.x0;
+  const mid = (x0 + x1) / 2;
+  const topStart = link.y0 - link.width / 2;
+  const topEnd = link.y1 - link.targetWidth / 2;
+  const bottomStart = link.y0 + link.width / 2;
+  const bottomEnd = link.y1 + link.targetWidth / 2;
+  return (
+    `M${x0},${topStart} C${mid},${topStart} ${mid},${topEnd} ${x1},${topEnd} ` +
+    `L${x1},${bottomEnd} C${mid},${bottomEnd} ${mid},${bottomStart} ${x0},${bottomStart} Z`
+  );
+}
+
+export function bandWidth(link: LayoutLink, t: number): number {
+  return link.width + (3 * t * t - 2 * t * t * t) * (link.targetWidth - link.width);
+}
+
 // A node strictly between a band's two columns must lie clear of the band wherever they
 // overlap in x. The push is how far the node must move down to clear it.
 export function findBandOverlaps(layout: SankeyLayout): BandOverlap[] {
@@ -259,8 +285,9 @@ export function findBandOverlaps(layout: SankeyLayout): BandOverlap[] {
       for (let i = 0; i <= CURVE_SAMPLES; i++) {
         const p = bandPoint(link, i / CURVE_SAMPLES);
         if (p.x < node.x0 - 0.5 || p.x > node.x1 + 0.5) continue;
-        const bottom = p.y + link.width / 2;
-        const top = p.y - link.width / 2;
+        const half = bandWidth(link, i / CURVE_SAMPLES) / 2;
+        const bottom = p.y + half;
+        const top = p.y - half;
         if (bottom > node.y0 - CLEARANCE && top < node.y1 + CLEARANCE) {
           push = Math.max(push, bottom - (node.y0 - CLEARANCE));
         }

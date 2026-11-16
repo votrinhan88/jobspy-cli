@@ -1,0 +1,143 @@
+/* ── Scrape progress bar ────────────────────────────────────────────────── */
+
+.scrape-progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.scrape-progress-bar-wrap {
+  flex: 1;
+  height: 6px;
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
+  border-radius: 99px;
+  overflow: hidden;
+}
+
+.scrape-progress-bar {
+  height: 100%;
+  background: var(--app-accent);
+  border-radius: 99px;
+  transition: width 0.4s ease;
+  min-width: 0;
+}
+
+.scrape-progress-label {
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--app-ink-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* ── Scrape run history table ───────────────────────────────────────────── */
+
+.history-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-md);
+}
+
+.history-table th {
+  text-align: left;
+  padding: 8px 14px;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--app-ink-muted);
+  background: var(--app-surface);
+  border-bottom: 1px solid var(--app-border);
+}
+
+.history-table td {
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--app-border);
+  color: var(--app-ink);
+}
+
+.history-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.history-table tbody tr:hover td {
+  background: var(--app-surface);
+}
+
+.history-ts {
+  font-size: var(--text-sm);
+  color: var(--app-ink-muted);
+}
+
+.history-duration {
+  font-family: var(--app-mono);
+  font-size: var(--text-sm);
+  color: var(--app-ink-muted);
+}
+
+/* ── Scrape log spoiler ─────────────────────────────────────────────────── */
+
+.log-spoiler {
+  border: 1px solid var(--app-border);
+  border-radius: 6px;
+  overflow: hidden;
+  margin-bottom: 24px;
+}
+
+.log-spoiler summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px;
+  font-size: var(--text-md);
+  font-weight: 500;
+  color: var(--app-ink-muted);
+  background: var(--app-panel);
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+}
+
+.log-spoiler summary::-webkit-details-marker {
+  display: none;
+}
+
+.log-spoiler summary:hover {
+  color: var(--app-ink);
+}
+
+.log-spoiler[open] summary {
+  border-bottom: 1px solid var(--app-border);
+}
+
+.log-chevron {
+  display: inline-block;
+  font-style: normal;
+  font-size: var(--text-2xs);
+  transition: transform 0.15s;
+  color: var(--app-ink-muted);
+}
+
+.log-spoiler[open] .log-chevron {
+  transform: rotate(90deg);
+}
+
+.log-body {
+  background: var(--app-surface);
+  padding: 12px 14px;
+  max-height: 320px;
+  overflow-y: auto;
+  overflow-x: auto;
+}
+
+.log-pre {
+  margin: 0;
+  font-family: var(--app-mono);
+  font-size: var(--text-sm);
+  line-height: 1.6;
+  color: var(--app-ink);
+  white-space: pre-wrap;
+  word-break: break-all;
+}

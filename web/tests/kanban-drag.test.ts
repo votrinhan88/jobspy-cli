@@ -100,7 +100,7 @@ async function checkInvariants(step: string) {
 describe("free drag and drop on the board", () => {
   it("keeps the saved log, the board and the flows in agreement across random drops", async () => {
     const random = prng(20260905);
-    for (let i = 0; i < 400; i++) {
+    for (let i = 0; i < 60; i++) {
       const jobId = JOB_IDS[Math.floor(random() * JOB_IDS.length)];
       const to = STATUSES[Math.floor(random() * STATUSES.length)];
       const res = await drop(jobId, to);

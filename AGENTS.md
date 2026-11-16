@@ -19,6 +19,7 @@ Always follow the instructions in `.agents/skills/test-driven-development/skill.
 - No hardcoded secrets or credentials
 - No comments that explain *what* the code does — only *why* when non-obvious
 - No emojis in code, comments, or output
+- No explanatory prose in the UI. No hints, helper text, or descriptions that restate what a control does or what a choice means. Allow only labels, values, and messages that report an error or a state the user must act on.
 
 ## Where Things Live
 

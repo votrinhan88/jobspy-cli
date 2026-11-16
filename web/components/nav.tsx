@@ -4,8 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+const PROFILE_ITEM = { label: "Profile", href: "/profile" };
+
 const NAV_ITEMS = [
-  { label: "Profile", href: "/profile" },
   { label: "Scrape", href: "/scrape" },
   { label: "Jobs", href: "/jobs" },
   { label: "Resume", href: "/resume" },
@@ -50,6 +51,20 @@ export function Nav({ activeProfile }: NavProps) {
     <span className="profile-chip profile-chip--none">none</span>
   );
 
+  function renderLink({ label, href }: { label: string; href: string }) {
+    const isActive = pathname === href || pathname.startsWith(href + "/");
+    return (
+      <Link
+        href={href}
+        className={`sidebar-link${isActive ? " sidebar-link--active" : ""}`}
+        onClick={() => open && close()}
+      >
+        {label}
+        {href === PROFILE_ITEM.href && chip}
+      </Link>
+    );
+  }
+
   return (
     <>
       <header className="topbar">
@@ -86,23 +101,12 @@ export function Nav({ activeProfile }: NavProps) {
         </div>
 
         <ul className="sidebar-nav">
-          {NAV_ITEMS.map(({ label, href }) => {
-            const isActive = pathname === href || pathname.startsWith(href + "/");
-            const isProfile = href === "/profile";
-            return (
-              <li key={href}>
-                <Link
-                  href={href}
-                  className={`sidebar-link${isActive ? " sidebar-link--active" : ""}`}
-                  onClick={() => open && close()}
-                >
-                  {label}
-                  {isProfile && chip}
-                </Link>
-              </li>
-            );
-          })}
+          {NAV_ITEMS.map((item) => (
+            <li key={item.href}>{renderLink(item)}</li>
+          ))}
         </ul>
+
+        <div className="sidebar-profile">{renderLink(PROFILE_ITEM)}</div>
       </nav>
     </>
   );

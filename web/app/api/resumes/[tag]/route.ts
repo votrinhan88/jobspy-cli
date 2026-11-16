@@ -6,6 +6,7 @@ import {
   listResumes,
   readResumeText,
   renameResume,
+  saveResumeText,
 } from "@/lib/resumes/library";
 import { isValidTag } from "@/lib/tag";
 import { renameSubmittedTag } from "@/lib/submitted";
@@ -55,6 +56,29 @@ export async function PATCH(request: NextRequest, { params }: Context) {
   await renameAnalyses(profile, from, to);
   await renameSubmittedTag(profile, from, to);
   return Response.json({ tag: to });
+}
+
+export async function PUT(request: NextRequest, { params }: Context) {
+  const profile = await getActiveProfile();
+  if (!profile) {
+    return Response.json({ error: "No active profile" }, { status: 400 });
+  }
+
+  const body = (await request.json().catch(() => null)) as { text?: unknown } | null;
+  if (typeof body?.text !== "string") {
+    return Response.json({ error: "Send the resume text." }, { status: 400 });
+  }
+
+  const { tag } = await params;
+  const result = await saveResumeText(profile, tag, body.text);
+  if (!result.ok) {
+    if (result.reason === "not_found") return Response.json(NO_RESUME, { status: 404 });
+    if (result.reason === "empty") {
+      return Response.json({ error: "The resume text is empty." }, { status: 400 });
+    }
+    return Response.json(INVALID_TAG, { status: 400 });
+  }
+  return Response.json({ version: result.version });
 }
 
 export async function DELETE(_request: NextRequest, { params }: Context) {

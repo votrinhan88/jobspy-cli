@@ -17,7 +17,6 @@ export function FetchDescriptionOption({
         />
         Fetch LinkedIn descriptions
       </label>
-      <p className="hint">Scrapes are slower. The text is needed for resume matching and gap analysis.</p>
     </div>
   );
 }

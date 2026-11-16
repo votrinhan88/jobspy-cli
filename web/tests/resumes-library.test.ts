@@ -30,14 +30,14 @@ describe("importFile", () => {
     expect(result).toMatchObject({ ok: true, tag: "backend", version: 1 });
     expect(await readResumeText("alice", "backend")).toBe("# Jane\n\nPython");
     const original = await readOriginal("alice", "backend");
-    expect(original?.fileName).toBe("cv.md");
+    expect(original?.ext).toBe("md");
     expect(new TextDecoder().decode(original?.bytes)).toBe("# Jane\n\nPython");
   });
 
-  it("lists the resumes with file name, version, import time and text hash", async () => {
+  it("lists the resumes with version, import time and text hash", async () => {
     await importFile("alice", "backend", "cv.txt", bytes("hello"));
     const [item] = await listResumes("alice");
-    expect(item).toMatchObject({ tag: "backend", fileName: "cv.txt", version: 1, ext: "txt" });
+    expect(item).toMatchObject({ tag: "backend", version: 1, ext: "txt" });
     expect(item.importedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     expect(item.textHash).toMatch(/^[0-9a-f]{16,}$/);
   });
@@ -49,7 +49,7 @@ describe("importFile", () => {
     expect(second).toMatchObject({ ok: true, version: 2 });
     const [item] = await listResumes("alice");
     expect(item.textHash).not.toBe(first.textHash);
-    expect(item.fileName).toBe("cv2.txt");
+    expect(item.ext).toBe("txt");
     expect(await readResumeText("alice", "backend")).toBe("two");
   });
 

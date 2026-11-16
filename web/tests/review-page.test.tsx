@@ -13,7 +13,6 @@ const json = (status: number, body: unknown) => ({ ok: status < 400, status, jso
 
 const meta = (tag: string, ext = "pdf") => ({
   tag,
-  fileName: `${tag}.${ext}`,
   ext,
   importedAt: "2026-11-02T10:00:00.000Z",
   version: 1,
@@ -66,16 +65,16 @@ describe("Review page", () => {
 
   it("selects the best matching tag and shows its resume next to the fit report", async () => {
     renderPage();
-    expect(await screen.findByLabelText("Resume text")).toHaveTextContent("Notes text");
+    expect(await screen.findByLabelText("Resume preview")).toHaveTextContent("Notes text");
     expect(screen.getByLabelText("Resume tag")).toHaveDisplayValue(/notes/);
     expect(screen.getByTestId("fit-report")).toHaveTextContent("job-1:notes");
   });
 
   it("switches the resume and the report when another tag is picked", async () => {
     renderPage();
-    await screen.findByLabelText("Resume text");
+    await screen.findByLabelText("Resume preview");
     await userEvent.selectOptions(screen.getByLabelText("Resume tag"), "backend");
-    expect(screen.getByTitle("Resume viewer")).toHaveAttribute("src", "/api/resumes/backend/file");
+    expect(screen.getByTitle("Resume viewer")).toHaveAttribute("src", "/api/resumes/backend/file#toolbar=0&navpanes=0&view=FitH");
     expect(screen.getByTestId("fit-report")).toHaveTextContent("job-1:backend");
   });
 

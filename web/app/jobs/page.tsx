@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Chip } from "@/components/chip";
 import type { Job, JobStatus } from "@/lib/csv";
-import { STATUSES, isRemote, isSkippedStatus, statusLabel } from "@/lib/status";
+import { STATUSES, isSkippedStatus, statusLabel } from "@/lib/status";
 import {
   FACET_FILTERS,
   facetOptions,
@@ -10,325 +11,25 @@ import {
   type FacetKey,
   type FacetSelections,
 } from "@/lib/facets";
-import { formatLastSeen, isClosed, isNewInRun, isStale } from "@/lib/lifecycle";
-import { firstSeenDays, isReposted } from "@/lib/posting-signals";
+import { latestCrawlAt } from "@/lib/lifecycle";
 import {
   DEFAULT_SORT,
   filterJobs,
-  formatLocation,
   groupByLocation,
   sortJobs,
   statusCounts,
-  type SortDir,
   type SortKey,
 } from "@/lib/jobs-view";
-import { StatusMenu } from "@/components/status-menu";
 import { useChangeStatus } from "@/components/use-change-status";
-import { ResumeFit } from "@/app/jobs/_components/resume-fit";
-import { LocationGroupRow } from "@/app/jobs/_components/location-group-row";
+import { JobDialog, TriageButtons } from "@/components/job-dialog";
+import { JobsTable, nextSort } from "@/components/jobs-table";
+import { RowActions } from "@/components/job-row-actions";
 import { FacetFilter } from "@/app/jobs/_components/facet-filter";
 
-function formatSalary(job: Job): string | null {
-  const min = job.min_amount ? parseFloat(job.min_amount) : null;
-  const max = job.max_amount ? parseFloat(job.max_amount) : null;
-  if (!min && !max) return null;
-  const cur = job.currency || "";
-  const iv = job.interval ? ` / ${job.interval}` : "";
-  if (min && max) return `${cur} ${min.toLocaleString()} – ${max.toLocaleString()}${iv}`;
-  if (min) return `${cur} ${min.toLocaleString()}+${iv}`;
-  return `${cur} up to ${max!.toLocaleString()}${iv}`;
-}
-
-const COLUMNS: { key: SortKey; label: string }[] = [
-  { key: "title", label: "Title" },
-  { key: "company", label: "Company" },
-  { key: "location", label: "Location" },
-  { key: "posted", label: "Posted" },
-  { key: "status", label: "Status" },
-];
-
-const EXTRA_COLUMNS: { key: SortKey; label: string }[] = [
-  { key: "seen", label: "Last seen" },
-  { key: "salary", label: "Salary" },
-];
-const SORT_COLUMNS = [...COLUMNS, ...EXTRA_COLUMNS];
-const TABLE_COLUMNS = SORT_COLUMNS.length + 1;
 const JOB_STATUSES = STATUSES.filter((status) => !isSkippedStatus(status));
 
 function emptyFacets(): FacetSelections {
   return { country: [], city: [], work_mode: [], seniority: [], employment_type: [] };
-}
-
-const FOCUSABLE =
-  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
-
-function StatusChip({ status }: { status: JobStatus }) {
-  return (
-    <span className={`status-chip status-chip--${status || "none"}`}>{statusLabel(status)}</span>
-  );
-}
-
-function TriageButtons({
-  job,
-  busy,
-  onChange,
-}: {
-  job: Job;
-  busy: boolean;
-  onChange: (job: Job, next: JobStatus) => void;
-}) {
-  if (job.status) return null;
-  return (
-    <>
-      <button
-        type="button"
-        className="btn btn-sm btn-secondary"
-        onClick={() => onChange(job, "shortlisted")}
-        disabled={busy}
-      >
-        Shortlist
-      </button>
-      <button
-        type="button"
-        className="btn btn-sm btn-ghost"
-        onClick={() => onChange(job, "skipped")}
-        disabled={busy}
-      >
-        Skip
-      </button>
-    </>
-  );
-}
-
-function JobDrawer({
-  job,
-  busy,
-  onClose,
-  onChange,
-}: {
-  job: Job;
-  busy: boolean;
-  onClose: () => void;
-  onChange: (job: Job, next: JobStatus) => void;
-}) {
-  const dialogRef = useRef<HTMLDivElement>(null);
-  const closeRef = useRef<HTMLButtonElement>(null);
-  const titleId = `drawer-title-${job.job_id}`;
-  const salary = formatSalary(job);
-  const remote = isRemote(job.is_remote);
-  const extra = job as Record<string, string>;
-  const ageDays = firstSeenDays(job.first_seen_at);
-  const reposted = isReposted(job.first_seen_at, job.date_posted);
-
-  useEffect(() => {
-    closeRef.current?.focus();
-  }, []);
-
-  function onKeyDown(e: React.KeyboardEvent) {
-    if (e.key === "Escape") {
-      e.preventDefault();
-      onClose();
-      return;
-    }
-    if (e.key !== "Tab" || !dialogRef.current) return;
-    const nodes = Array.from(dialogRef.current.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(
-      (n) => n.offsetParent !== null || n === document.activeElement
-    );
-    if (nodes.length === 0) return;
-    const first = nodes[0];
-    const last = nodes[nodes.length - 1];
-    if (e.shiftKey && (document.activeElement === first || !dialogRef.current.contains(document.activeElement))) {
-      e.preventDefault();
-      last.focus();
-    } else if (!e.shiftKey && document.activeElement === last) {
-      e.preventDefault();
-      first.focus();
-    }
-  }
-
-  return (
-    <>
-      <div className="drawer-backdrop" onClick={onClose} aria-hidden="true" />
-      <div
-        ref={dialogRef}
-        className="drawer"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        onKeyDown={onKeyDown}
-      >
-        <div className="drawer-header">
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <h2 id={titleId} className="drawer-title">
-              <a href={job.job_url} target="_blank" rel="noopener noreferrer" className="drawer-title-link">
-                {job.title || "—"}
-                <span className="sr-only"> (opens in a new tab)</span>
-                <svg className="drawer-title-icon" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
-                  <path d="M4.5 2.5h5v5M9.5 2.5l-7 7" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-                </svg>
-              </a>
-            </h2>
-            <p className="drawer-company">{job.company || "—"}</p>
-          </div>
-          <button
-            ref={closeRef}
-            type="button"
-            className="icon-btn drawer-close"
-            onClick={onClose}
-            aria-label="Close job details"
-          >
-            <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
-              <path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-            </svg>
-          </button>
-        </div>
-
-        <div className="drawer-body">
-          <div className="drawer-field">
-            <span className="drawer-label">Status</span>
-            <StatusChip status={job.status} />
-          </div>
-
-          {job.location && (
-            <div className="drawer-field">
-              <span className="drawer-label">Location</span>
-              <span>{formatLocation(job)}</span>
-            </div>
-          )}
-
-          <div className="drawer-field">
-            <span className="drawer-label">Posted</span>
-            <span className="mono">{job.date_posted || "—"}</span>
-          </div>
-
-          <div className="drawer-field">
-            <span className="drawer-label">First seen</span>
-            <span className="mono">{formatLastSeen(job.first_seen_at)}</span>
-            {ageDays !== null && (
-              <span className="muted">
-                {ageDays === 1 ? "1 day ago" : `${ageDays} days ago`}
-              </span>
-            )}
-          </div>
-
-          {reposted && (
-            <div className="drawer-field">
-              <span className="drawer-label">Board date</span>
-              <span>Later than the first sighting</span>
-            </div>
-          )}
-
-          <div className="drawer-field">
-            <span className="drawer-label">Last seen</span>
-            <span className="mono">{formatLastSeen(job.last_seen_at)}</span>
-            {isClosed(job.closed_at) ? (
-              <span className="lifecycle-badge lifecycle-badge--closed">Closed</span>
-            ) : isStale(job.last_seen_at) ? (
-              <span className="lifecycle-badge lifecycle-badge--stale">Stale</span>
-            ) : null}
-          </div>
-
-          {isClosed(job.closed_at) && (
-            <div className="drawer-field">
-              <span className="drawer-label">Closed</span>
-              <span className="mono">
-                {formatLastSeen(job.closed_at)}
-                {job.closed_reason ? ` · ${job.closed_reason}` : ""}
-              </span>
-            </div>
-          )}
-
-          <div className="drawer-field">
-            <span className="drawer-label">Source</span>
-            <span className="count-badge">{extra["site"] || "—"}</span>
-            {remote && <span className="count-badge" style={{ marginLeft: 6 }}>Remote</span>}
-          </div>
-
-          {salary && (
-            <div className="drawer-field">
-              <span className="drawer-label">Salary</span>
-              <span className="salary-display">{salary}</span>
-            </div>
-          )}
-
-          {extra["job_type"] && (
-            <div className="drawer-field">
-              <span className="drawer-label">Type</span>
-              <span>{extra["job_type"]}</span>
-            </div>
-          )}
-
-          {extra["job_level"] && (
-            <div className="drawer-field">
-              <span className="drawer-label">Level</span>
-              <span>{extra["job_level"]}</span>
-            </div>
-          )}
-
-          {extra["company_industry"] && (
-            <div className="drawer-field">
-              <span className="drawer-label">Industry</span>
-              <span>{extra["company_industry"]}</span>
-            </div>
-          )}
-
-          <ResumeFit jobId={job.job_id} key={job.job_id} />
-
-          <div className="drawer-actions">
-            {extra["job_url_direct"] && (
-              <a
-                href={extra["job_url_direct"]}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="btn btn-primary btn-sm"
-              >
-                Apply directly
-              </a>
-            )}
-            <TriageButtons job={job} busy={busy} onChange={onChange} />
-            <StatusMenu
-              current={job.status}
-              jobTitle={job.title || "job"}
-              disabled={busy}
-              onSelect={(s) => onChange(job, s)}
-            />
-          </div>
-        </div>
-      </div>
-    </>
-  );
-}
-
-function SortIcon({ dir }: { dir: SortDir | null }) {
-  return (
-    <svg className="sort-icon" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
-      {dir !== "desc" && <path d="M2.5 4.5L5 2l2.5 2.5" fill="none" stroke="currentColor" strokeWidth="1.3" opacity={dir ? 1 : 0.35} />}
-      {dir !== "asc" && <path d="M2.5 5.5L5 8l2.5-2.5" fill="none" stroke="currentColor" strokeWidth="1.3" opacity={dir ? 1 : 0.35} />}
-    </svg>
-  );
-}
-
-function SortHeader({
-  label,
-  sortKey,
-  active,
-  dir,
-  onToggle,
-}: {
-  label: string;
-  sortKey: SortKey;
-  active: boolean;
-  dir: SortDir | null;
-  onToggle: (key: SortKey) => void;
-}) {
-  return (
-    <th aria-sort={active ? (dir === "asc" ? "ascending" : "descending") : "none"}>
-      <button type="button" className="sort-btn" onClick={() => onToggle(sortKey)}>
-        {label}
-        <SortIcon dir={active ? dir : null} />
-      </button>
-    </th>
-  );
 }
 
 export default function JobsPage() {
@@ -337,9 +38,8 @@ export default function JobsPage() {
   const [error, setError] = useState<string | null>(null);
   const [noProfile, setNoProfile] = useState(false);
   const [query, setQuery] = useState("");
-  const [statuses, setStatuses] = useState<Set<JobStatus>>(new Set());
+  const [statuses, setStatuses] = useState<Set<JobStatus>>(new Set<JobStatus>([""]));
   const [newOnly, setNewOnly] = useState(false);
-  const [runStartedAt, setRunStartedAt] = useState<string | null>(null);
   const [remoteOnly, setRemoteOnly] = useState(false);
   const [facets, setFacets] = useState<FacetSelections>(emptyFacets);
   const [groupLocations, setGroupLocations] = useState(false);
@@ -368,31 +68,14 @@ export default function JobsPage() {
     load();
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-    async function loadRun() {
-      try {
-        const res = await fetch("/api/scrape/status");
-        if (!res.ok) return;
-        const status = await res.json();
-        if (!cancelled) setRunStartedAt(status.started_at ?? null);
-      } catch {
-        if (!cancelled) setRunStartedAt(null);
-      }
-    }
-    loadRun();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
+  const crawlAt = useMemo(() => latestCrawlAt(jobs), [jobs]);
   const listJobs = useMemo(() => jobs.filter((job) => !isSkippedStatus(job.status)), [jobs]);
   const filters = useMemo(
     () => ({
       query,
       statuses,
       newOnly,
-      newSince: runStartedAt,
+      crawlAt,
       remoteOnly,
       country: facets.country,
       city: facets.city,
@@ -400,7 +83,7 @@ export default function JobsPage() {
       seniority: facets.seniority,
       employmentType: facets.employment_type,
     }),
-    [query, statuses, newOnly, runStartedAt, remoteOnly, facets]
+    [query, statuses, newOnly, crawlAt, remoteOnly, facets]
   );
   const facetChoices = useMemo(() => {
     const choices = {} as Record<FacetKey, string[]>;
@@ -436,59 +119,7 @@ export default function JobsPage() {
   }
 
   function toggleSort(key: SortKey) {
-    setSort((prev) =>
-      prev.key === key
-        ? { key, dir: prev.dir === "asc" ? "desc" : "asc" }
-        : { key, dir: key === "posted" || key === "seen" || key === "salary" ? "desc" : "asc" }
-    );
-  }
-
-  function renderJobRow(job: Job) {
-    const salary = formatSalary(job);
-    const closed = isClosed(job.closed_at);
-    const stale = !closed && isStale(job.last_seen_at);
-    const newInRun = isNewInRun(job.first_seen_at, runStartedAt);
-    return (
-      <tr
-        key={job.job_id}
-        className={`job-row job-row--${job.status || "none"}${selectedId === job.job_id ? " job-row--selected" : ""}`}
-      >
-        <td className="job-title-cell" data-label="Title">
-          <button
-            type="button"
-            className="job-link"
-            onClick={(e) => openDrawer(job, e.currentTarget)}
-          >
-            {job.title || "—"}
-          </button>
-        </td>
-        <td className="job-company-cell" data-label="Company">{job.company || "—"}</td>
-        <td className="muted" data-label="Location">{formatLocation(job) || "—"}</td>
-        <td className="muted mono" data-label="Posted">{job.date_posted || "—"}</td>
-        <td data-label="Status">
-          {job.status ? (
-            <StatusChip status={job.status} />
-          ) : (
-            <span className="sr-only">{statusLabel("")}</span>
-          )}
-          {newInRun && <span className="lifecycle-badge lifecycle-badge--new">NEW</span>}
-        </td>
-        <td className="muted mono" data-label="Last seen">
-          <span>{formatLastSeen(job.last_seen_at)}</span>
-          {closed ? (
-            <span className="lifecycle-badge lifecycle-badge--closed">Closed</span>
-          ) : stale ? (
-            <span className="lifecycle-badge lifecycle-badge--stale">Stale</span>
-          ) : null}
-        </td>
-        <td className="salary-display" data-label="Salary">{salary || "—"}</td>
-        <td className="action-cell">
-          <div className="row-actions row-actions--end">
-            <TriageButtons job={job} busy={pending.has(job.job_id)} onChange={changeStatus} />
-          </div>
-        </td>
-      </tr>
-    );
+    setSort((prev) => nextSort(prev, key));
   }
 
   function toggleStatus(status: JobStatus) {
@@ -530,7 +161,6 @@ export default function JobsPage() {
       <header className="page-header page-header--row">
         <div>
           <h1 className="page-title">Jobs</h1>
-          <p className="page-subtitle">All scraped postings.</p>
         </div>
         <div className="header-actions">
           <input
@@ -550,56 +180,32 @@ export default function JobsPage() {
       {!loading && listJobs.length > 0 && (
         <div className="filter-bar">
           <div className="filter-chips" role="group" aria-label="Filter by status">
-            <button
-              type="button"
-              className="filter-chip"
-              aria-pressed={statuses.size === 0 && !newOnly}
+            <Chip
+              pressed={statuses.size === 0 && !newOnly}
               onClick={() => {
                 setStatuses(new Set());
                 setNewOnly(false);
               }}
             >
               All <span className="filter-chip-count">{counts.all}</span>
-            </button>
-            <button
-              type="button"
-              className="filter-chip"
-              aria-label="New jobs"
-              aria-pressed={newOnly}
-              onClick={() => setNewOnly((value) => !value)}
-            >
+            </Chip>
+            <Chip pressed={newOnly} onClick={() => setNewOnly((value) => !value)}>
               New <span className="filter-chip-count">{counts.new}</span>
-            </button>
+            </Chip>
             {JOB_STATUSES.map((s) => (
-              <button
-                key={s || "untriaged"}
-                type="button"
-                className="filter-chip"
-                aria-pressed={statuses.has(s)}
-                onClick={() => toggleStatus(s)}
-              >
+              <Chip key={s || "untriaged"} pressed={statuses.has(s)} onClick={() => toggleStatus(s)}>
                 <span className={`status-dot status-dot--${s || "none"}`} aria-hidden="true" />
                 {statusLabel(s)} <span className="filter-chip-count">{counts[s]}</span>
-              </button>
+              </Chip>
             ))}
           </div>
           <div className="filter-bar-end">
-            <button
-              type="button"
-              className="filter-chip"
-              aria-pressed={remoteOnly}
-              onClick={() => setRemoteOnly((r) => !r)}
-            >
+            <Chip pressed={remoteOnly} onClick={() => setRemoteOnly((r) => !r)}>
               Remote only
-            </button>
-            <button
-              type="button"
-              className="filter-chip"
-              aria-pressed={groupLocations}
-              onClick={() => setGroupLocations((g) => !g)}
-            >
+            </Chip>
+            <Chip pressed={groupLocations} onClick={() => setGroupLocations((g) => !g)}>
               Group by location
-            </button>
+            </Chip>
             <span className="count-badge" aria-live="polite">
               {visible.length} of {listJobs.length} jobs
             </span>
@@ -643,52 +249,25 @@ export default function JobsPage() {
               : "No jobs match these filters."}
         </p>
       ) : (
-        <div className="table-wrap table-wrap--cards">
-          <table className="jobs-table jobs-table--cards">
-            <thead>
-              <tr>
-                {SORT_COLUMNS.map(({ key, label }) => (
-                  <SortHeader
-                    key={key}
-                    sortKey={key}
-                    label={label}
-                    active={sort.key === key}
-                    dir={sort.dir}
-                    onToggle={toggleSort}
-                  />
-                ))}
-                <th><span className="sr-only">Actions</span></th>
-              </tr>
-            </thead>
-            <tbody>
-              {locationGroups
-                ? locationGroups.flatMap((country) => [
-                    <LocationGroupRow
-                      key={`country:${country.country}`}
-                      level="country"
-                      label={country.country}
-                      count={country.count}
-                      colSpan={TABLE_COLUMNS}
-                    />,
-                    ...country.regions.flatMap((region) => [
-                      <LocationGroupRow
-                        key={`region:${country.country}|${region.region}`}
-                        level="region"
-                        label={region.region}
-                        count={region.count}
-                        colSpan={TABLE_COLUMNS}
-                      />,
-                      ...region.jobs.map(renderJobRow),
-                    ]),
-                  ])
-                : visible.map(renderJobRow)}
-            </tbody>
-          </table>
-        </div>
+        <JobsTable
+          jobs={visible}
+          groups={locationGroups}
+          sort={sort}
+          onSort={toggleSort}
+          crawlAt={crawlAt}
+          selectedId={selectedId}
+          onOpen={openDrawer}
+          renderActions={(job) => (
+            <>
+              <TriageButtons job={job} busy={pending.has(job.job_id)} onChange={changeStatus} />
+              {job.status && <RowActions job={job} busy={pending.has(job.job_id)} onChange={changeStatus} />}
+            </>
+          )}
+        />
       )}
 
       {selectedJob && (
-        <JobDrawer
+        <JobDialog
           job={selectedJob}
           busy={pending.has(selectedJob.job_id)}
           onClose={closeDrawer}

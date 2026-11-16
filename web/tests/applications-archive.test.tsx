@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import ApplicationsPage from "@/app/applications/page";
 
 function job(overrides: Record<string, string> = {}) {
@@ -74,5 +74,30 @@ describe("Applications page", () => {
     await screen.findByRole("region", { name: "Status history by job" });
     expect(screen.getByText("Applied Job")).toBeInTheDocument();
     expect(screen.queryByText("Skipped Job")).not.toBeInTheDocument();
+  });
+});
+
+describe("Applications archive", () => {
+  it("shows accepted and rejected jobs in one archive section", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        json: async () => [
+          job(),
+          job({ job_id: "job-3", title: "Accepted Job", status: "accepted" }),
+          job({ job_id: "job-4", title: "Rejected Job", status: "rejected" }),
+        ],
+      }))
+    );
+
+    render(<ApplicationsPage />);
+
+    const archive = await screen.findByRole("group", { name: "Archived applications" });
+    expect(within(archive).getByText("Accepted Job")).toBeInTheDocument();
+    expect(within(archive).getByText("Rejected Job")).toBeInTheDocument();
+    expect(screen.getByText("Archive")).toBeInTheDocument();
+    expect(screen.getByText("1 active application, 1 accepted, 1 rejected")).toBeInTheDocument();
   });
 });

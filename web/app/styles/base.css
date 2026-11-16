@@ -1,0 +1,43 @@
+/* ── Reset / base ───────────────────────────────────────────────────────── */
+
+body {
+  font-family: var(--app-font);
+  font-size: var(--text-base);
+  line-height: 1.6;
+  color: var(--app-ink);
+  background: var(--app-surface);
+  margin: 0;
+}
+
+/* Hide Next.js dev tools badge */
+nextjs-portal {
+  display: none;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--app-border) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--app-border);
+  border-radius: 99px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--app-ink-muted);
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+

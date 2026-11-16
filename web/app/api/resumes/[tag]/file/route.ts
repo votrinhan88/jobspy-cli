@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 import { getActiveProfile } from "@/lib/profile";
-import { readOriginal } from "@/lib/resumes/library";
+import { listResumes, readOriginal, readResumeText } from "@/lib/resumes/library";
 
 type Context = { params: Promise<{ tag: string }> };
 
@@ -36,10 +36,22 @@ export async function GET(request: NextRequest, { params }: Context) {
   }
 
   const download = new URL(request.url).searchParams.get("download") === "1";
+  const edited = (await listResumes(profile)).find((item) => item.tag === tag)?.edited;
+  const text = edited ? await readResumeText(profile, tag) : null;
+  if (text !== null) {
+    return new Response(text, {
+      headers: {
+        "Content-Type": "text/markdown; charset=utf-8",
+        "Content-Disposition": disposition(`${tag}.md`, download),
+        "X-Content-Type-Options": "nosniff",
+        "Cache-Control": "no-store",
+      },
+    });
+  }
   return new Response(Buffer.from(original.bytes), {
     headers: {
       "Content-Type": CONTENT_TYPES[original.ext] ?? TEXT_TYPE,
-      "Content-Disposition": disposition(original.fileName, download),
+      "Content-Disposition": disposition(`${tag}.${original.ext}`, download),
       "X-Content-Type-Options": "nosniff",
       "Cache-Control": "no-store",
     },

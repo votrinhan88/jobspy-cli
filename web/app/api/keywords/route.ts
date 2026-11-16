@@ -1,14 +1,40 @@
 import fs from "fs/promises";
-import path from "path";
+import type { NextRequest } from "next/server";
+import { getActiveProfile, keywordsPath } from "@/lib/profile";
 
-const REPO_ROOT = path.resolve(process.cwd(), "..");
+function clean(lines: string[]): string[] {
+  return lines.map((l) => l.trim()).filter(Boolean);
+}
 
 export async function GET() {
-  try {
-    const text = await fs.readFile(path.join(REPO_ROOT, "keywords.txt"), "utf-8");
-    const keywords = text.split("\n").map((l) => l.trim()).filter(Boolean);
-    return Response.json({ keywords });
-  } catch {
-    return Response.json({ error: "keywords.txt not found" }, { status: 404 });
+  const profile = await getActiveProfile();
+  if (!profile) {
+    return Response.json({ error: "No active profile" }, { status: 400 });
   }
+  try {
+    const text = await fs.readFile(keywordsPath(profile), "utf-8");
+    return Response.json({ keywords: clean(text.split(/\r?\n/)) });
+  } catch {
+    return Response.json({ error: "No saved job titles for this profile" }, { status: 404 });
+  }
+}
+
+export async function PUT(request: NextRequest) {
+  const profile = await getActiveProfile();
+  if (!profile) {
+    return Response.json({ error: "No active profile" }, { status: 400 });
+  }
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return Response.json({ error: "The request body must be valid JSON" }, { status: 400 });
+  }
+  const list = (body as { keywords?: unknown } | null)?.keywords;
+  if (!Array.isArray(list) || !list.every((item) => typeof item === "string")) {
+    return Response.json({ error: "keywords must be a list of strings" }, { status: 400 });
+  }
+  const keywords = clean(list);
+  await fs.writeFile(keywordsPath(profile), keywords.map((k) => `${k}\n`).join(""), "utf-8");
+  return Response.json({ keywords });
 }

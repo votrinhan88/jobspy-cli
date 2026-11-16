@@ -19,6 +19,17 @@ const ids = (jobs: Job[]) => jobs.map((x) => x.job_id);
 const none = { query: "", statuses: new Set<JobStatus>(), remoteOnly: false };
 
 describe("sortJobs", () => {
+  it("puts the newest job first inside a tie, in both directions", () => {
+    const jobs = [
+      j("old", { status: "applied", first_seen_at: "2026-08-01T00:00:00Z" }),
+      j("new", { status: "applied", first_seen_at: "2026-09-01T00:00:00Z" }),
+      j("none", { status: "applied" }),
+      j("mid", { status: "applied", first_seen_at: "2026-08-15T00:00:00Z" }),
+    ];
+    expect(ids(sortJobs(jobs, "status", "asc"))).toEqual(["new", "mid", "old", "none"]);
+    expect(ids(sortJobs(jobs, "status", "desc"))).toEqual(["new", "mid", "old", "none"]);
+  });
+
   it("default sort is posted date, newest first", () => {
     const jobs = [j("a", { date_posted: "2026-08-21" }), j("b", { date_posted: "2026-09-06" }), j("c", { date_posted: "2026-09-05" })];
     expect(DEFAULT_SORT).toEqual({ key: "posted", dir: "desc" });
@@ -72,6 +83,17 @@ describe("sortJobs", () => {
       "older-post",
       "none",
     ]);
+  });
+
+  it("breaks status ties by the posted date, newest first, in both directions", () => {
+    const jobs = [
+      j("old", { status: "applied", date_posted: "2026-08-01" }),
+      j("none", { status: "applied" }),
+      j("new", { status: "applied", date_posted: "2026-09-10" }),
+      j("short", { status: "shortlisted", date_posted: "2026-07-01" }),
+    ];
+    expect(ids(sortJobs(jobs, "status", "asc"))).toEqual(["short", "new", "old", "none"]);
+    expect(ids(sortJobs(jobs, "status", "desc"))).toEqual(["new", "old", "none", "short"]);
   });
 
   it("sorts by salary by the top of the range", () => {
@@ -263,7 +285,7 @@ describe("groupByLocation", () => {
 describe("formatLocation", () => {
   it("shows country, region and city, widest place first", () => {
     expect(formatLocation(j("1", { location: "Melbourne, Australia", region: "Victoria" }))).toBe(
-      "Australia, Victoria, Melbourne"
+      "Australia, VIC, Melbourne"
     );
   });
 
@@ -297,17 +319,17 @@ describe("formatLocation", () => {
   it("keeps a region that only contains the country name", () => {
     expect(
       formatLocation(j("1", { location: "Canberra, Australia", region: "Australian Capital Territory" }))
-    ).toBe("Australia, Australian Capital Territory, Canberra");
+    ).toBe("Australia, ACT, Canberra");
   });
 
   it("keeps every stored part and puts the country first, then the region, then the stored places from wide to narrow", () => {
     expect(formatLocation(j("1", { location: "Surry Hills, Sydney, Australia", region: "New South Wales" }))).toBe(
-      "Australia, New South Wales, Sydney, Surry Hills"
+      "Australia, NSW, Sydney, Surry Hills"
     );
   });
 
   it("puts the region after a country that stands alone", () => {
-    expect(formatLocation(j("1", { location: "Australia", region: "Victoria" }))).toBe("Australia, Victoria");
+    expect(formatLocation(j("1", { location: "Australia", region: "Victoria" }))).toBe("Australia, VIC");
   });
 
   it("returns an empty text for an empty location", () => {
@@ -397,26 +419,34 @@ describe("filterJobs facets", () => {
   });
 });
 
-describe("filterJobs latest run", () => {
-  const run = "2026-09-15T12:00:00Z";
+describe("filterJobs new window", () => {
+  const crawlAt = Date.parse("2026-09-15T01:00:00Z");
   const jobs = [
-    j("old", { first_seen_at: "2026-08-01T00:00:00Z" }),
-    j("new", { first_seen_at: "2026-09-15T13:00:00Z" }),
-    j("same", { first_seen_at: run }),
+    j("old", { first_seen_at: "2026-08-01T00:00:00Z", last_seen_at: "2026-09-15T01:00:00Z" }),
+    j("prev", { first_seen_at: "2026-09-13T00:00:00Z", last_seen_at: "2026-09-15T01:00:00Z" }),
+    j("fresh", { first_seen_at: "2026-09-15T01:00:00Z", last_seen_at: "2026-09-15T01:00:00Z" }),
+    j("fresh-old-post", { first_seen_at: "2026-09-15T01:00:00Z", last_seen_at: "2026-09-15T01:00:00Z", date_posted: "2026-04-16" }),
     j("none"),
   ];
 
-  it("keeps only jobs first seen in the latest run", () => {
-    expect(ids(filterJobs(jobs, { ...none, newOnly: true, newSince: run }))).toEqual(["new", "same"]);
+  it("keeps only jobs first seen in the latest crawl, whatever the posting date", () => {
+    expect(ids(filterJobs(jobs, { ...none, newOnly: true, crawlAt }))).toEqual(["fresh", "fresh-old-post"]);
   });
 
-  it("does not filter when the New chip is off", () => {
-    expect(ids(filterJobs(jobs, { ...none, newSince: run }))).toEqual(["old", "new", "same", "none"]);
+  it("does not filter when the chip is off", () => {
+    expect(ids(filterJobs(jobs, { ...none, crawlAt }))).toEqual(["old", "prev", "fresh", "fresh-old-post", "none"]);
   });
 
-  it("status counts include the latest-run count", () => {
-    const counts = statusCounts(jobs, { ...none, newSince: run });
-    expect(counts.new).toBe(2);
+  it("marks nothing as new when there is no crawl time", () => {
+    expect(ids(filterJobs(jobs, { ...none, newOnly: true }))).toEqual([]);
+  });
+
+  it("counts new jobs", () => {
+    expect(statusCounts(jobs, { ...none, crawlAt }).new).toBe(2);
+  });
+
+  it("keeps the counts the same while the chip is on", () => {
+    expect(statusCounts(jobs, { ...none, newOnly: true, crawlAt })).toEqual(statusCounts(jobs, { ...none, crawlAt }));
   });
 });
 

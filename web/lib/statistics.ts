@@ -1,14 +1,7 @@
-import type { Job, JobStatus } from "@/lib/csv";
+import type { Job } from "@/lib/csv";
 import { facetValueLabel, type FacetKey } from "@/lib/facets";
 import { formatLocation } from "@/lib/jobs-view";
-import { STATUSES, isActiveStatus, isArchivedStatus, isRemote } from "@/lib/status";
-
-export const STATUS_ORDER: JobStatus[] = STATUSES.filter((s) => s !== "");
-
-export interface StatusCount {
-  status: JobStatus;
-  count: number;
-}
+import { isActiveStatus, isArchivedStatus, isRemote } from "@/lib/status";
 
 export interface TimelinePoint {
   label: string;
@@ -28,7 +21,7 @@ export interface Statistics {
   active: number;
   remote: number;
   archived: number;
-  perStatus: StatusCount[];
+  untriaged: number;
   timeline: TimelinePoint[];
   topCompanies: { name: string; count: number }[];
   topLocations: { name: string; count: number }[];
@@ -72,12 +65,9 @@ function topFacetCounts(jobs: Job[], key: FacetKey, limit: number): { name: stri
 }
 
 export function computeStatistics(jobs: Job[]): Statistics {
-  const perStatus: StatusCount[] = STATUS_ORDER.map((status) => ({
-    status,
-    count: jobs.filter((j) => j.status === status).length,
-  }));
   const active = jobs.filter((j) => isActiveStatus(j.status)).length;
   const archived = jobs.filter((j) => isArchivedStatus(j.status)).length;
+  const untriaged = jobs.filter((j) => j.status === "").length;
   const remote = jobs.filter((j) => isRemote(j.is_remote)).length;
 
   const weekCounts = new Map<string, number>();
@@ -96,7 +86,7 @@ export function computeStatistics(jobs: Job[]): Statistics {
     active,
     remote,
     archived,
-    perStatus,
+    untriaged,
     timeline,
     topCompanies: topCounts(jobs.map((j) => j.company), 6),
     topLocations: topCounts(jobs.map((j) => formatLocation(j)), 6),

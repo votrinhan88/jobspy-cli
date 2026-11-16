@@ -60,7 +60,6 @@ export default function ArchivedPage() {
     <div className="page-content page-content--wide">
       <header className="page-header">
         <h1 className="page-title">Archived</h1>
-        <p className="page-subtitle">Skipped jobs. They do not appear on Jobs or Applications.</p>
       </header>
 
       {error && <div className="alert alert-error">{error}</div>}

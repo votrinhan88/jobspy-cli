@@ -1,0 +1,249 @@
+/* ── View toggle ────────────────────────────────────────────────────────── */
+
+.view-toggle {
+  display: flex;
+  border: 1px solid var(--app-border);
+  border-radius: 6px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.view-btn {
+  padding: 6px 14px;
+  font-size: var(--text-md);
+  font-weight: 500;
+  font-family: var(--app-font);
+  background: var(--app-panel);
+  color: var(--app-ink-muted);
+  border: none;
+  border-left: 1px solid var(--app-border);
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+}
+
+.view-btn:first-child {
+  border-left: none;
+}
+
+.view-btn:hover {
+  color: var(--app-ink);
+  background: var(--app-surface);
+}
+
+.view-btn--active {
+  background: var(--app-surface);
+  color: var(--app-ink);
+  font-weight: 600;
+}
+
+/* ── Kanban board ───────────────────────────────────────────────────────── */
+
+.kanban-board {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  align-items: stretch;
+}
+
+.kanban-archive {
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid var(--app-border);
+}
+
+.kanban-col--over {
+  box-shadow: inset 0 0 0 2px var(--app-accent);
+  background: color-mix(in srgb, var(--app-accent) 6%, var(--app-panel));
+}
+
+.kanban-col {
+  background: var(--app-panel);
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.kanban-col-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--app-border);
+  background: var(--app-surface);
+}
+
+.kanban-count {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--app-ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The bottom padding is the room the drop box uses, so a drag never changes a column height. */
+.kanban-cards {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 150px;
+  padding: 10px 10px 84px;
+  background: var(--app-surface);
+}
+
+.kanban-cards--over {
+  background: color-mix(in srgb, var(--app-accent) 7%, var(--app-surface));
+}
+
+.kanban-slot {
+  flex: none;
+  height: 64px;
+  margin-bottom: -74px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--app-accent) 10%, var(--app-surface));
+  outline: 2px dashed color-mix(in srgb, var(--app-accent) 45%, transparent);
+  outline-offset: -6px;
+}
+
+.job-card--dragging {
+  opacity: 0.45;
+}
+
+.kanban-empty {
+  font-size: var(--text-md);
+  color: var(--app-ink-muted);
+  padding: 4px 2px;
+  margin: 0;
+}
+
+/* ── Sankey ─────────────────────────────────────────────────────────────── */
+
+.sankey {
+  width: 100%;
+  height: auto;
+  display: block;
+  font-family: var(--app-font);
+}
+
+.sankey-link {
+  fill: var(--app-accent);
+  fill-opacity: 0.45;
+}
+
+.sankey-link--shortlisted { fill: #2563eb; }
+.sankey-link--applied { fill: #7c3aed; }
+.sankey-link--interview { fill: #d97706; }
+.sankey-link--offer { fill: #6b7280; }
+.sankey-link--accepted { fill: #059669; }
+.sankey-link--rejected { fill: #dc2626; }
+.sankey-link--skipped { fill: #6b7280; }
+
+.sankey-node {
+  fill: var(--app-accent);
+}
+
+.sankey-node--shortlisted { fill: #2563eb; }
+.sankey-node--applied { fill: #7c3aed; }
+.sankey-node--interview { fill: #d97706; }
+.sankey-node--offer { fill: #6b7280; }
+.sankey-node--accepted { fill: #059669; }
+.sankey-node--rejected { fill: #dc2626; }
+.sankey-node--skipped { fill: #6b7280; }
+
+.sankey-label {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  fill: var(--app-ink);
+}
+
+.sankey-count {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  fill: var(--app-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.sankey-count-bg {
+  fill: var(--app-panel);
+  stroke: var(--app-border);
+  stroke-width: 1;
+}
+
+/* ── Job card ───────────────────────────────────────────────────────────── */
+
+.job-card[draggable="true"] {
+  cursor: grab;
+}
+
+.job-card[draggable="true"]:active {
+  cursor: grabbing;
+}
+
+.job-card {
+  background: var(--app-panel);
+  border: 1px solid var(--app-border);
+  border-radius: 6px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.job-card-title {
+  padding: 0;
+  border: none;
+  background: none;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  font-size: var(--text-md);
+  font-weight: 500;
+  color: var(--app-ink);
+  text-decoration: none;
+  line-height: 1.4;
+}
+
+.job-card-title:hover {
+  color: var(--app-accent);
+  text-decoration: underline;
+}
+
+.job-card-company {
+  font-size: var(--text-sm);
+  color: var(--app-ink-muted);
+  margin: 0;
+}
+
+.job-card-location {
+  font-size: var(--text-sm);
+  color: var(--app-ink-muted);
+  margin: 0;
+}
+
+.job-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+/* ── Row actions (table view) ───────────────────────────────────────────── */
+
+.row-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.link {
+  color: var(--app-accent);
+  text-decoration: underline;
+}
+
+.empty-card-sub {
+  font-size: var(--text-md);
+  color: var(--app-ink-muted);
+  margin: 0;
+}
+

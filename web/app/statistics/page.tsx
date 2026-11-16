@@ -5,11 +5,7 @@ import type { Job } from "@/lib/csv";
 import type { StatusLogEntry } from "@/lib/status-log";
 import { buildSankey } from "@/lib/sankey";
 import { SankeyChart } from "@/components/sankey-chart";
-import {
-  computeStatistics,
-  STATUS_ORDER,
-  type Statistics,
-} from "@/lib/statistics";
+import { computeStatistics, type Statistics } from "@/lib/statistics";
 
 export default function StatisticsPage() {
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -65,9 +61,6 @@ export default function StatisticsPage() {
     <div className="page-content page-content--wide">
       <header className="page-header">
         <h1 className="page-title">Statistics</h1>
-        <p className="page-subtitle">
-          Application pipeline stats and timeline for the active profile.
-        </p>
       </header>
 
       {error && <div className="alert alert-error">{error}</div>}
@@ -84,10 +77,6 @@ export default function StatisticsPage() {
       ) : (
         <>
           <SummaryCards stats={stats} />
-          <section className="section">
-            <h2 className="section-title">Pipeline</h2>
-            <PipelineFunnel stats={stats} />
-          </section>
           <section className="section">
             <h2 className="section-title">Flow</h2>
             <SankeyChart graph={flow} />
@@ -153,6 +142,7 @@ export default function StatisticsPage() {
 function SummaryCards({ stats }: { stats: Statistics }) {
   const cards = [
     { label: "Total jobs", value: stats.total, tone: "neutral" },
+    { label: "Not yet reviewed", value: stats.untriaged, tone: "neutral" },
     { label: "Active", value: stats.active, tone: "accent" },
     { label: "Remote", value: stats.remote, tone: "offer" },
     { label: "Archived", value: stats.archived, tone: "rejected" },
@@ -165,31 +155,6 @@ function SummaryCards({ stats }: { stats: Statistics }) {
           <div className="stat-label">{c.label}</div>
         </div>
       ))}
-    </div>
-  );
-}
-
-function PipelineFunnel({ stats }: { stats: Statistics }) {
-  const max = Math.max(1, ...stats.perStatus.map((s) => s.count));
-  return (
-    <div className="funnel">
-      {STATUS_ORDER.map((status) => {
-        const entry = stats.perStatus.find((s) => s.status === status)!;
-        return (
-          <div key={status} className="funnel-row">
-            <span className={`status-chip status-chip--${status}`}>
-              {status}
-            </span>
-            <div className="funnel-track">
-              <div
-                className={`funnel-bar funnel-bar--${status}`}
-                style={{ width: `${(entry.count / max) * 100}%` }}
-              />
-            </div>
-            <span className="funnel-count">{entry.count}</span>
-          </div>
-        );
-      })}
     </div>
   );
 }

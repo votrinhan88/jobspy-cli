@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { extractText, isSupportedFile } from "@/lib/resumes/extract";
-import { tinyPdf } from "./helpers";
+import { pdfWithLines, tinyPdf } from "./helpers";
 
 const bytes = (text: string) => new TextEncoder().encode(text);
 
@@ -47,6 +47,18 @@ describe("extractText", () => {
   it("reads the text of a pdf", async () => {
     const text = await extractText("cv.pdf", tinyPdf("Python and SQL engineer"));
     expect(text).toContain("Python and SQL engineer");
+  });
+
+  it("reads headings from the font size of a pdf", async () => {
+    const pdf = pdfWithLines([
+      { text: "Jane Doe", size: 24, y: 740 },
+      { text: "Experience", size: 16, y: 700 },
+      { text: "Wrote code", size: 10, y: 680 },
+      { text: "Wrote more code", size: 10, y: 668 },
+    ]);
+    const text = await extractText("cv.pdf", pdf);
+    expect(text).toContain("# Jane Doe");
+    expect(text).toContain("## Experience");
   });
 
   it("throws a clear error for a pdf that cannot be read", async () => {

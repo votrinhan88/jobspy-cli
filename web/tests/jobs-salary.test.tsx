@@ -95,26 +95,17 @@ describe("Jobs salary column", () => {
     expect(rows[0]).toHaveTextContent("Lower");
   });
 
-  it("sorts by last seen when the header is clicked", async () => {
-    jobs = [
-      job({ job_id: "older", title: "Older", last_seen_at: "2026-09-01T13:00:00Z" }),
-      job({ job_id: "newer", title: "Newer", last_seen_at: "2026-09-20T13:00:00Z" }),
-    ];
+  it("has no Last seen column", async () => {
+    jobs = [job()];
 
     render(<JobsPage />);
-    await screen.findByText("Older");
-    await userEvent.click(screen.getByRole("button", { name: /Last seen/ }));
+    await screen.findByText("AI Engineer");
 
-    const rows = screen.getAllByRole("row").filter((row) => /Older|Newer/.test(row.textContent ?? ""));
-    expect(rows[0]).toHaveTextContent("Newer");
-    expect(screen.getByRole("columnheader", { name: "Last seen" })).toHaveAttribute(
-      "aria-sort",
-      "descending"
-    );
+    expect(screen.queryByRole("columnheader", { name: /Last seen/ })).not.toBeInTheDocument();
   });
 
   it("keeps the body cells in the header order", async () => {
-    jobs = [job({ status: "applied" })];
+    jobs = [job()];
 
     render(<JobsPage />);
     await screen.findByText("AI Engineer");
@@ -129,7 +120,6 @@ describe("Jobs salary column", () => {
       "Location",
       "Posted",
       "Status",
-      "Last seen",
       "Salary",
       null,
     ]);

@@ -36,13 +36,13 @@ afterEach(() => {
 });
 
 describe("Jobs lifecycle display", () => {
-  it("shows the last seen date and a stale badge", async () => {
+  it("shows a stale badge and no last seen date", async () => {
     jobs = [job()];
 
     render(<JobsPage />);
 
     expect(await screen.findByText("Old Job")).toBeInTheDocument();
-    expect(screen.getByText("2000-01-01")).toBeInTheDocument();
+    expect(screen.queryByText("2000-01-01")).not.toBeInTheDocument();
     expect(screen.getByText("Stale")).toBeInTheDocument();
   });
 

@@ -1,0 +1,148 @@
+/* ── App shell ──────────────────────────────────────────────────────────── */
+
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.app-main {
+  flex: 1;
+  overflow-y: auto;
+  scrollbar-gutter: stable both-edges;
+  position: relative;
+  background: var(--app-surface);
+}
+
+/* ── Sidebar ────────────────────────────────────────────────────────────── */
+
+.sidebar {
+  flex-shrink: 0;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: stretch;
+  gap: 24px;
+  height: var(--app-nav-h);
+  padding: 0 var(--page-pad-x);
+  box-sizing: border-box;
+  background: var(--app-panel);
+  border-bottom: 1px solid var(--app-border);
+  overflow-x: auto;
+}
+
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+}
+
+.sidebar-logo {
+  font-family: var(--app-mono);
+  font-size: var(--text-lg);
+  font-weight: 500;
+  color: var(--app-ink);
+  letter-spacing: -0.02em;
+}
+
+.sidebar-nav {
+  display: flex;
+  flex-direction: row;
+  gap: 4px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.sidebar-profile {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.sidebar-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 100%;
+  padding: 0 12px;
+  box-sizing: border-box;
+  font-size: var(--text-base);
+  font-weight: 500;
+  color: var(--app-ink-muted);
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+  transition: color 0.12s, border-color 0.12s;
+}
+
+.sidebar-link:hover {
+  color: var(--app-ink);
+}
+
+.sidebar-link--active {
+  color: var(--app-accent);
+  border-bottom-color: var(--app-accent);
+}
+
+.profile-chip {
+  font-family: var(--app-mono);
+  font-size: var(--text-xs);
+  padding: 2px 6px;
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
+  border-radius: 4px;
+  color: var(--app-ink-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100px;
+  flex-shrink: 0;
+}
+
+.profile-chip--none {
+  color: var(--app-ink-muted);
+  border-style: dashed;
+  opacity: 0.6;
+}
+
+/* ── Page layout ────────────────────────────────────────────────────────── */
+
+/* One container for all pages so the left edge does not move between pages. */
+.page-content {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--page-pad-y) var(--page-pad-x);
+  box-sizing: border-box;
+}
+
+.page-content:not(.page-content--wide) > * {
+  max-width: 796px;
+  margin-inline: auto;
+}
+
+.page-header {
+  margin-bottom: var(--page-gap);
+}
+
+/* The nav already names the page, so the title stays for screen readers only. */
+.page-title {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.page-header:has(> .page-title:only-child) {
+  margin-block: 0;
+}
+
+.page-subtitle {
+  font-size: var(--text-base);
+  color: var(--app-ink-muted);
+  margin: 0;
+  max-width: 60ch;
+}
+

@@ -34,9 +34,4 @@ describe("LocationGroupRow", () => {
     renderRow({ level: "region", label: "", count: 2, colSpan: 7 });
     expect(screen.getByRole("rowheader")).toHaveTextContent("No region");
   });
-
-  it("marks the level in a class so the two levels look different", () => {
-    renderRow({ level: "region", label: "Victoria", count: 2, colSpan: 7 });
-    expect(screen.getByRole("row")).toHaveClass("group-row--region");
-  });
 });

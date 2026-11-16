@@ -1,0 +1,629 @@
+/* ── Resume library ─────────────────────────────────────────────────────── */
+
+.resume-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 400px) minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+  margin-top: 0;
+}
+
+.resume-main,
+.resume-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.resume-preview {
+  position: sticky;
+  top: 24px;
+}
+
+.resume-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  background: var(--app-panel);
+}
+
+.resume-card .section-title {
+  margin: 0;
+}
+
+.resume-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.resume-library .input {
+  max-width: 100%;
+}
+
+.resume-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.resume-item {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 16px;
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  background: var(--app-panel);
+}
+
+.resume-item-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.resume-item-info {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.resume-item-head > .resume-actions {
+  flex: none;
+}
+
+.resume-item-tag {
+  font-size: var(--text-base);
+  font-weight: 500;
+  color: var(--app-ink);
+}
+
+.resume-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-base);
+}
+
+.resume-table th {
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--app-border);
+  font-weight: 500;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.resume-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--app-border);
+}
+
+.resume-table tbody tr {
+  cursor: pointer;
+}
+
+.resume-table tbody tr:hover:not([data-selected="true"]) {
+  background: color-mix(in srgb, var(--app-accent) 8%, var(--app-surface));
+}
+
+.resume-table tbody tr[data-selected="true"] {
+  background: color-mix(in srgb, var(--app-accent) 30%, var(--app-surface));
+  box-shadow: inset 3px 0 0 var(--app-accent);
+}
+
+.resume-table tbody tr[data-selected="true"] .resume-node-label {
+  font-weight: 600;
+}
+
+.resume-sort,
+.resume-node-label {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--app-ink);
+  font-family: inherit;
+  font-size: inherit;
+  cursor: pointer;
+}
+
+.resume-sort {
+  color: var(--app-ink-muted);
+  font-size: var(--text-sm);
+}
+
+.resume-sort-mark {
+  display: inline-block;
+  width: 1em;
+  margin-left: 4px;
+  font-size: var(--text-2xs);
+  visibility: hidden;
+}
+
+.resume-sort-mark[data-active="true"] {
+  visibility: visible;
+}
+
+.resume-node-label {
+  display: inline-block;
+  font-weight: 500;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.resume-node-label::after {
+  content: attr(data-label);
+  display: block;
+  height: 0;
+  overflow: hidden;
+  font-weight: 600;
+  visibility: hidden;
+}
+
+.resume-sort:focus-visible,
+.resume-node-label:focus-visible,
+.resume-title-button:focus-visible {
+  outline: 2px solid var(--app-accent);
+  outline-offset: 2px;
+}
+
+.resume-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.resume-title-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: text;
+}
+
+.resume-rename .input {
+  min-width: 200px;
+}
+
+.resume-detail-head .resume-rename .input {
+  grid-area: 1 / 1;
+  width: 0;
+  max-width: none;
+  min-width: 100%;
+  height: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: 0 1px 0 var(--app-accent);
+  color: var(--app-ink);
+  font: inherit;
+  font-size: var(--text-3xl);
+  font-weight: 600;
+  line-height: normal;
+  outline: none;
+}
+
+.resume-rename-sizer {
+  display: inline-grid;
+  max-width: 100%;
+  font-size: var(--text-3xl);
+  font-weight: 600;
+}
+
+.resume-rename-sizer::after {
+  content: attr(data-value) " ";
+  grid-area: 1 / 1;
+  min-width: 2ch;
+  visibility: hidden;
+  white-space: pre;
+}
+
+.resume-detail-head .resume-item-info > .section-title,
+.resume-detail-head .resume-item-info > .resume-rename {
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+}
+
+.resume-rename-error {
+  color: var(--app-error-text);
+}
+
+.resume-detail-head {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.resume-detail-head .section-title {
+  margin: 0;
+  font-size: var(--text-3xl);
+  font-weight: 600;
+  color: var(--app-ink);
+}
+
+.resume-workspace--editing {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.resume-workspace--editing .resume-preview {
+  position: static;
+}
+
+.resume-menu {
+  position: relative;
+}
+
+.resume-menu-button {
+  font-size: var(--text-2xl);
+  line-height: 1;
+  padding-inline: 10px;
+}
+
+.resume-menu-list {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  min-width: 120px;
+  padding: 4px;
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  background: var(--app-panel);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 35%);
+}
+
+.resume-menu-item {
+  display: block;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--app-ink);
+  font-family: var(--app-font);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.resume-menu-item:hover,
+.resume-menu-item:focus-visible {
+  background: var(--app-border);
+}
+
+.resume-menu-item--danger {
+  color: var(--app-error-text);
+}
+
+.resume-item-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--app-border);
+}
+
+.resume-text {
+  margin: 0;
+  padding: 16px;
+  max-height: 80vh;
+  overflow: auto;
+  white-space: pre-wrap;
+  font-family: var(--app-mono);
+  font-size: var(--text-md);
+  line-height: 1.6;
+  color: var(--app-ink);
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  background: var(--app-panel);
+}
+
+.resume-frame,
+.resume-viewer {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  height: calc(100vh - 150px);
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: var(--app-border);
+}
+
+.resume-viewer {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.resume-viewer .resume-sheet-frame {
+  height: 100%;
+  max-height: none;
+  border-radius: 0;
+}
+
+.resume-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.resume-editor-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.resume-editor-bar .save-state {
+  margin-right: auto;
+}
+
+.resume-editing-head {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.resume-editing-head .page-title {
+  margin: 0;
+}
+
+.resume-editor-panes {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+
+.resume-editor-input {
+  min-height: calc(100vh - 200px);
+  font-family: var(--app-mono);
+  font-size: var(--text-md);
+  line-height: 1.5;
+}
+
+/* Computer Modern, the LaTeX default (cmr10), from KaTeX (MIT, fonts OFL). */
+@font-face {
+  font-family: "Computer Modern";
+  src: url("/fonts/KaTeX_Main-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+}
+
+@font-face {
+  font-family: "Computer Modern";
+  src: url("/fonts/KaTeX_Main-Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: block;
+}
+
+@font-face {
+  font-family: "Computer Modern";
+  src: url("/fonts/KaTeX_Main-Italic.woff2") format("woff2");
+  font-weight: 400;
+  font-style: italic;
+  font-display: block;
+}
+
+@font-face {
+  font-family: "Computer Modern";
+  src: url("/fonts/KaTeX_Main-BoldItalic.woff2") format("woff2");
+  font-weight: 700;
+  font-style: italic;
+  font-display: block;
+}
+
+/* The sheet is an A4 page. The print rules below change only where the page sits, never how the text lays out,
+   so the preview and the exported PDF match. Values come from measuring the reference PDF (pdfTeX, 9.96 pt body). */
+.resume-sheet-frame {
+  max-height: calc(100vh - 200px);
+  overflow: auto;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: #c8c8c8 transparent;
+  border-radius: 4px;
+  background: #fff;
+}
+
+.resume-sheet {
+  box-sizing: border-box;
+  width: 210mm;
+  min-height: 297mm;
+  margin: 0 auto;
+  padding: 15.24mm;
+  background: linear-gradient(to bottom, transparent calc(100% - 1px), #c8c8c8 calc(100% - 1px)) content-box 0 0 / 100% 266.52mm repeat-y, #fff;
+  color: #000;
+  font-family: "Computer Modern", "Latin Modern Roman", "Times New Roman", serif;
+  font-size: 9.96pt;
+  line-height: 1.2;
+  text-align: justify;
+  /* Ligatures such as fi can extract from a PDF as one odd symbol, so an ATS misreads the word. */
+  font-variant-ligatures: none;
+}
+
+.resume-sheet h1,
+.resume-sheet h2,
+.resume-sheet h3,
+.resume-sheet strong { font-weight: 700; }
+.resume-sheet h1 { margin: 0 0 6pt; font-size: 24.79pt; line-height: 1.1; text-align: center; }
+.resume-sheet h1 + p { margin: 0; font-size: 8.97pt; text-align: center; }
+.resume-sheet h2 { margin: 12pt 0 3.7pt; padding-bottom: 1.3pt; border-bottom: 0.4pt solid #000; font-size: 11.96pt; text-transform: uppercase; }
+.resume-sheet h3 { margin: 5.97pt 0 0; font-size: 9.96pt; text-align: left; }
+.resume-sheet h2 + h3 { margin-top: 0; }
+.resume-sheet p { margin: 0; }
+.resume-sheet ul { margin: 1.99pt 0 0; padding-left: 14.94pt; list-style: none; }
+.resume-sheet li { position: relative; }
+.resume-sheet li + li { margin-top: 1.99pt; }
+.resume-sheet li::before { content: "\2022"; position: absolute; left: -9.96pt; }
+/* The reference PDF draws links blue with no underline. */
+.resume-link { color: #0000ff; text-decoration: none; }
+.resume-line { display: block; }
+.resume-contact-item { white-space: nowrap; }
+.resume-contact-sep { margin: 0 0.5em; }
+.resume-contact-icon { display: inline-block; width: 0.95em; height: 0.95em; margin-right: 0.3em; vertical-align: -0.12em; }
+.resume-row { display: flex; justify-content: space-between; gap: 12pt; text-align: left; }
+.resume-row-end { flex: none; text-align: right; }
+.resume-sheet h3 .resume-row-end { font-weight: 700; }
+.resume-sheet h1,
+.resume-sheet h2,
+.resume-sheet h3 { break-after: avoid; }
+.resume-sheet li,
+.resume-sheet p { orphans: 3; widows: 3; }
+
+@media (min-width: 900px) {
+  .resume-editor-panes {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+
+@media print {
+  @page {
+    size: A4;
+    margin: 15.24mm;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
+  .resume-sheet,
+  .resume-sheet * {
+    visibility: visible;
+  }
+
+  .resume-sheet-frame {
+    max-height: none;
+    overflow: visible;
+  }
+
+  .resume-sheet {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: auto;
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    background: none;
+    zoom: 1 !important;
+  }
+}
+
+@media (max-width: 900px) {
+  .resume-preview {
+    position: static;
+  }
+}
+
+
+.resume-graph-scroll {
+  overflow-x: hidden;
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  background: var(--app-panel);
+  padding: 0;
+}
+
+.resume-graph {
+  min-width: 0;
+}
+
+.resume-graph-head,
+.resume-graph-row {
+  display: grid;
+  grid-template-columns: var(--graph-width) minmax(0, 1fr) 88px 40px;
+  align-items: center;
+  column-gap: 8px;
+}
+
+.resume-graph-head {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--app-border);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--app-ink-muted);
+}
+
+.resume-graph-body {
+  position: relative;
+}
+
+.resume-graph-lanes {
+  position: absolute;
+  top: 0;
+  left: 10px;
+  pointer-events: none;
+}
+
+.resume-graph-edge {
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.resume-graph-dot {
+  stroke: var(--app-panel);
+  stroke-width: 1.5;
+}
+
+.resume-graph-dot--selected {
+  stroke: var(--app-ink);
+}
+
+.resume-graph-row {
+  width: 100%;
+  height: var(--row-height);
+  padding: 0 10px;
+  border: none;
+  background: none;
+  color: var(--app-ink);
+  font-family: var(--app-font);
+  font-size: var(--text-md);
+  text-align: left;
+  cursor: pointer;
+}
+
+.resume-graph-row:hover {
+  background: var(--app-surface);
+}
+
+.resume-graph-row:focus-visible {
+  outline: 2px solid var(--app-accent);
+  outline-offset: -2px;
+}
+
+.resume-graph-row--selected {
+  background: color-mix(in srgb, var(--app-accent) 14%, var(--app-panel));
+}
+
+.resume-graph-tag {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.resume-graph-meta {
+  color: var(--app-ink-muted);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}

@@ -18,14 +18,30 @@ describe("ResumeViewer", () => {
   it("shows a pdf in a frame that points at the file route and does not fetch text", () => {
     render(<ResumeViewer tag="backend" ext="pdf" />);
     const frame = screen.getByTitle("Resume viewer");
-    expect(frame).toHaveAttribute("src", "/api/resumes/backend/file");
+    expect(frame).toHaveAttribute("src", "/api/resumes/backend/file#toolbar=0&navpanes=0&view=FitH");
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("shows the text, not the pdf, once the resume was edited", async () => {
+    fetchMock.mockResolvedValue(json(200, { meta: { tag: "backend" }, text: "Edited text" }));
+    render(<ResumeViewer tag="backend" ext="pdf" edited />);
+    expect(await screen.findByLabelText("Resume preview")).toHaveTextContent("Edited text");
+    expect(screen.queryByTitle("Resume viewer")).not.toBeInTheDocument();
+  });
+
+  it("loads the text again when the revision changes", async () => {
+    fetchMock.mockResolvedValue(json(200, { meta: {}, text: "First" }));
+    const { rerender } = render(<ResumeViewer tag="notes" ext="md" revision={0} />);
+    await screen.findByText("First");
+    fetchMock.mockResolvedValue(json(200, { meta: {}, text: "Second" }));
+    rerender(<ResumeViewer tag="notes" ext="md" revision={1} />);
+    expect(await screen.findByText("Second")).toBeInTheDocument();
   });
 
   it("shows the text of a non-pdf resume", async () => {
     fetchMock.mockResolvedValue(json(200, { meta: { tag: "notes" }, text: "Python and SQL" }));
     render(<ResumeViewer tag="notes" ext="md" />);
-    expect(await screen.findByLabelText("Resume text")).toHaveTextContent("Python and SQL");
+    expect(await screen.findByLabelText("Resume preview")).toHaveTextContent("Python and SQL");
     expect(fetchMock).toHaveBeenCalledWith("/api/resumes/notes");
   });
 

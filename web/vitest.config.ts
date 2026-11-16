@@ -18,7 +18,9 @@ export default defineConfig({
         resolve: { alias },
         test: {
           name: "dom",
-          environment: "jsdom",
+          pool: "vmThreads",
+          environment: "happy-dom",
+          environmentOptions: { happyDOM: { settings: { handleDisabledFileLoadingAsSuccess: true } } },
           include: ["tests/**/*.test.tsx"],
           setupFiles: ["./vitest.setup.ts"],
           globals: true,

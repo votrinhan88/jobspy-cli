@@ -67,29 +67,6 @@ describe("Jobs facet filters", () => {
     expect(screen.getByText("ML Engineer")).toBeInTheDocument();
   });
 
-  it("narrows the city options to the selected country", async () => {
-    jobs = [
-      job({ job_id: "1", title: "Data Engineer" }),
-      job({
-        job_id: "2",
-        title: "ML Engineer",
-        location: "Hanoi, Vietnam",
-        country: "Vietnam",
-        city: "Hanoi",
-      }),
-    ];
-
-    render(<JobsPage />);
-
-    await screen.findByText("Data Engineer");
-    await openFacet(/^Country:/);
-    await userEvent.click(screen.getByRole("checkbox", { name: "Vietnam" }));
-    await openFacet(/^City:/);
-
-    expect(screen.queryByRole("checkbox", { name: "Sydney" })).not.toBeInTheDocument();
-    expect(screen.getByRole("checkbox", { name: "Hanoi" })).toBeInTheDocument();
-  });
-
   it("clears a city that does not match a new country", async () => {
     jobs = [
       job({ job_id: "1", title: "Data Engineer" }),

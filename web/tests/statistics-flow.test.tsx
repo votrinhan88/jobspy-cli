@@ -55,7 +55,27 @@ describe("Statistics flow", () => {
     stubFetch(false);
     render(<StatisticsPage />);
 
-    expect(await screen.findByRole("heading", { name: "Pipeline" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Flow" })).toBeInTheDocument();
     expect(screen.getByText(/no status changes recorded/i)).toBeInTheDocument();
+  });
+
+  it("drops the pipeline bars and counts the jobs not yet reviewed", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => ({
+        ok: true,
+        status: 200,
+        json: async () =>
+          String(input).includes("/api/jobs/log")
+            ? []
+            : [job(), job({ job_id: "job-2", status: "" }), job({ job_id: "job-3", status: "" })],
+      }))
+    );
+    render(<StatisticsPage />);
+
+    await screen.findByRole("heading", { name: "Flow" });
+    expect(screen.queryByRole("heading", { name: "Pipeline" })).not.toBeInTheDocument();
+    const tile = screen.getByText("Not yet reviewed").closest(".stat-card")!;
+    expect(tile).toHaveTextContent("2");
   });
 });

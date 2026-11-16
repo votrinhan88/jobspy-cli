@@ -1,6 +1,7 @@
 import type { Job, JobStatus } from "@/lib/csv";
 import { STATUSES, isRemote } from "@/lib/status";
-import { isNewInRun } from "@/lib/lifecycle";
+import { isNew } from "@/lib/lifecycle";
+import { abbreviateRegion } from "@/lib/regions";
 
 export type SortKey = "posted" | "title" | "company" | "location" | "status" | "seen" | "salary";
 export type SortDir = "asc" | "desc";
@@ -15,7 +16,7 @@ export interface JobFilters {
   seniority?: string[];
   employmentType?: string[];
   newOnly?: boolean;
-  newSince?: string | null;
+  crawlAt?: number | null;
 }
 
 export type StatusCounts = Record<JobStatus | "all" | "new", number>;
@@ -85,7 +86,7 @@ export function formatLocation(job: Job): string {
   const repeated =
     lowerRegion === country || parts.slice(0, -1).some((part) => lowerRegion.includes(part.toLowerCase()));
   if (region && !repeated) {
-    parts.splice(parts.length - 1, 0, region);
+    parts.splice(parts.length - 1, 0, abbreviateRegion(region, parts[parts.length - 1]));
   }
   return parts.reverse().join(", ");
 }
@@ -115,19 +116,18 @@ function compareLocation(a: Job, b: Job, sign: number): number {
   return 0;
 }
 
-export function sortJobs(jobs: Job[], key: SortKey, dir: SortDir): Job[] {
-  const sign = dir === "asc" ? 1 : -1;
-  if (key === "location") return [...jobs].sort((a, b) => compareLocation(a, b, sign));
+function comparator(key: SortKey, sign: number): (a: Job, b: Job) => number {
+  if (key === "location") return (a, b) => compareLocation(a, b, sign);
   if (key === "salary") {
-    return [...jobs].sort((a, b) => {
+    return (a, b) => {
       const va = salaryValue(a);
       const vb = salaryValue(b);
       if (va === null || vb === null) return va === vb ? 0 : va === null ? 1 : -1;
       if (va === vb) return 0;
       return va < vb ? -sign : sign;
-    });
+    };
   }
-  return [...jobs].sort((a, b) => {
+  return (a, b) => {
     const va = sortValue(a, key);
     const vb = sortValue(b, key);
     const emptyA = va === "";
@@ -135,13 +135,30 @@ export function sortJobs(jobs: Job[], key: SortKey, dir: SortDir): Job[] {
     if (emptyA || emptyB) return emptyA === emptyB ? 0 : emptyA ? 1 : -1;
     if (va < vb) return -sign;
     if (va > vb) return sign;
-    if (key === "seen") {
-      const pa = (a.date_posted ?? "").trim();
-      const pb = (b.date_posted ?? "").trim();
-      if (pa !== pb) return pa < pb ? 1 : -1;
-    }
     return 0;
-  });
+  };
+}
+
+function postedFirst(a: Job, b: Job): number {
+  const pa = (a.date_posted ?? "").trim();
+  const pb = (b.date_posted ?? "").trim();
+  if (pa === pb) return 0;
+  if (pa === "" || pb === "") return pa === "" ? 1 : -1;
+  return pa < pb ? 1 : -1;
+}
+
+// The file keeps rows in scrape order, so without this tie-break new jobs land after old ones.
+function newestFirst(a: Job, b: Job): number {
+  const fa = (a.first_seen_at ?? "").trim();
+  const fb = (b.first_seen_at ?? "").trim();
+  if (fa === fb) return 0;
+  if (fa === "" || fb === "") return fa === "" ? 1 : -1;
+  return fa < fb ? 1 : -1;
+}
+
+export function sortJobs(jobs: Job[], key: SortKey, dir: SortDir): Job[] {
+  const compare = comparator(key, dir === "asc" ? 1 : -1);
+  return [...jobs].sort((a, b) => compare(a, b) || postedFirst(a, b) || newestFirst(a, b));
 }
 
 export function groupByLocation(jobs: Job[]): CountryGroup[] {
@@ -204,12 +221,12 @@ function applyBaseFilters(
   const words = queryWords(filters.query);
   return jobs
     .filter((job) => (!filters.remoteOnly || isRemote(job.is_remote)) && matchesQuery(job, words))
-    .filter((job) => matchesFacets(job, filters))
-    .filter((job) => !filters.newOnly || isNewInRun(job.first_seen_at, filters.newSince));
+    .filter((job) => matchesFacets(job, filters));
 }
 
 export function filterJobs(jobs: Job[], filters: JobFilters): Job[] {
-  const narrowed = applyBaseFilters(jobs, filters);
+  const base = applyBaseFilters(jobs, filters);
+  const narrowed = filters.newOnly ? base.filter((job) => isNew(job.first_seen_at, filters.crawlAt ?? null)) : base;
   if (filters.statuses.size === 0) return narrowed;
   return narrowed.filter((job) => filters.statuses.has((job.status ?? "") as JobStatus));
 }
@@ -222,7 +239,7 @@ export function statusCounts(
   for (const s of STATUSES) counts[s] = 0;
   for (const job of applyBaseFilters(jobs, filters)) {
     counts.all++;
-    if (isNewInRun(job.first_seen_at, filters.newSince)) counts.new++;
+    if (isNew(job.first_seen_at, filters.crawlAt ?? null)) counts.new++;
     const s = (job.status ?? "") as JobStatus;
     if (s in counts) counts[s]++;
   }

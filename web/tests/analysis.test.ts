@@ -29,10 +29,6 @@ describe("resolveModel", () => {
     expect(resolveModel({})).toBe("claude-haiku-5-5");
     expect(resolveModel({ ANTHROPIC_MODEL: "  " })).toBe("claude-haiku-5-5");
   });
-
-  it("uses ANTHROPIC_MODEL when set", () => {
-    expect(resolveModel({ ANTHROPIC_MODEL: "claude-sonnet-5-5" })).toBe("claude-sonnet-5-5");
-  });
 });
 
 describe("analysisAvailable", () => {

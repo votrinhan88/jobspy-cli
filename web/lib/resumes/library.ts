@@ -14,11 +14,13 @@ const TEXT_FILE = "text.txt";
 
 export interface ResumeMeta {
   tag: string;
-  fileName: string;
   ext: string;
   importedAt: string;
   version: number;
   textHash: string;
+  edited?: boolean;
+  editedAt?: string;
+  parent?: string;
 }
 
 export type ImportResult =
@@ -29,16 +31,22 @@ export type RenameResult =
   | { ok: true; tag: string }
   | { ok: false; reason: "not_found" | "exists" | "invalid_tag" };
 
+export type SaveTextResult =
+  | { ok: true; version: number }
+  | { ok: false; reason: "invalid_tag" | "not_found" | "empty" };
+
+export type RewriteResult =
+  | { ok: true; text: string }
+  | { ok: false; reason: "not_found" | "ambiguous" };
+
 export type DeleteResult = { ok: true } | { ok: false; reason: "not_found" };
 
 export interface OriginalFile {
-  fileName: string;
   ext: string;
   bytes: Uint8Array;
 }
 
 interface StoredFile {
-  fileName: string;
   ext: string;
   bytes: Uint8Array;
   text: string;
@@ -49,7 +57,6 @@ function isMeta(value: unknown, tag: string): value is ResumeMeta {
   const meta = value as Record<string, unknown>;
   return (
     meta.tag === tag &&
-    typeof meta.fileName === "string" &&
     typeof meta.ext === "string" &&
     typeof meta.importedAt === "string" &&
     typeof meta.version === "number" &&
@@ -108,19 +115,29 @@ export async function importFile(
   }
   if (text.trim() === "") return { ok: false, reason: "empty" };
 
-  return store(profile, tag, { fileName, ext: fileExtension(fileName), bytes, text });
+  return store(profile, tag, { ext: fileExtension(fileName), bytes, text });
 }
 
-export async function importText(profile: string, tag: string, text: string): Promise<ImportResult> {
+export async function importText(
+  profile: string,
+  tag: string,
+  text: string,
+  parent?: string
+): Promise<ImportResult> {
   if (!isValidTag(tag)) return { ok: false, reason: "invalid_tag" };
   const cleaned = normalizeText(text);
   if (cleaned === "") return { ok: false, reason: "empty" };
 
+  const known =
+    parent !== undefined &&
+    parent !== tag &&
+    isValidTag(parent) &&
+    (await isDirectory(resumeLibraryItemDir(profile, parent)));
   const bytes = new TextEncoder().encode(cleaned);
-  return store(profile, tag, { fileName: `${tag}.txt`, ext: "txt", bytes, text: cleaned });
+  return store(profile, tag, { ext: "txt", bytes, text: cleaned }, known ? parent : undefined);
 }
 
-async function store(profile: string, tag: string, file: StoredFile): Promise<ImportResult> {
+async function store(profile: string, tag: string, file: StoredFile, parentTag?: string): Promise<ImportResult> {
   const libraryDir = resumeLibraryDir(profile);
   const target = resumeLibraryItemDir(profile, tag);
   await fs.mkdir(libraryDir, { recursive: true });
@@ -129,13 +146,14 @@ async function store(profile: string, tag: string, file: StoredFile): Promise<Im
   const previous = await readMeta(profile, tag);
   // Same text under the same tag is not a new version, even when the file itself changed.
   const version = previous ? (previous.textHash === textHash ? previous.version : previous.version + 1) : 1;
+  const parent = parentTag ?? previous?.parent;
   const meta: ResumeMeta = {
     tag,
-    fileName: file.fileName,
     ext: file.ext,
     importedAt: new Date().toISOString(),
     version,
     textHash,
+    ...(parent ? { parent } : {}),
   };
 
   // Build in a temp folder and rename into place so a failed write never leaves a partial resume.
@@ -171,7 +189,7 @@ export async function readOriginal(profile: string, tag: string): Promise<Origin
     const buffer = await fs.readFile(
       path.join(resumeLibraryItemDir(profile, tag), `original.${meta.ext}`)
     );
-    return { fileName: meta.fileName, ext: meta.ext, bytes: new Uint8Array(buffer) };
+    return { ext: meta.ext, bytes: new Uint8Array(buffer) };
   } catch {
     return null;
   }
@@ -194,7 +212,24 @@ export async function renameResume(profile: string, from: string, to: string): P
       "utf-8"
     );
   }
+  await relinkChildren(profile, from, to);
   return { ok: true, tag: to };
+}
+
+// A child of a renamed parent follows the new name. A child of a deleted parent becomes a root,
+// so a later resume that reuses the tag does not adopt it.
+async function relinkChildren(profile: string, parent: string, next: string | undefined): Promise<void> {
+  for (const child of await listResumes(profile)) {
+    if (child.parent !== parent) continue;
+    const meta: ResumeMeta = { ...child };
+    if (next === undefined) delete meta.parent;
+    else meta.parent = next;
+    await fs.writeFile(
+      path.join(resumeLibraryItemDir(profile, child.tag), META_FILE),
+      JSON.stringify(meta, null, 2),
+      "utf-8"
+    );
+  }
 }
 
 export async function deleteResume(profile: string, tag: string): Promise<DeleteResult> {
@@ -202,5 +237,42 @@ export async function deleteResume(profile: string, tag: string): Promise<Delete
   const dir = resumeLibraryItemDir(profile, tag);
   if (!(await isDirectory(dir))) return { ok: false, reason: "not_found" };
   await fs.rm(dir, { recursive: true, force: true });
+  await relinkChildren(profile, tag, undefined);
   return { ok: true };
+}
+
+// The original file stays as imported. Only the text copy changes, so the user can always go back to the import.
+export async function saveResumeText(profile: string, tag: string, text: string): Promise<SaveTextResult> {
+  if (!isValidTag(tag)) return { ok: false, reason: "invalid_tag" };
+  const meta = await readMeta(profile, tag);
+  if (!meta) return { ok: false, reason: "not_found" };
+  const cleaned = normalizeText(text);
+  if (cleaned === "") return { ok: false, reason: "empty" };
+
+  const textHash = hashText(cleaned);
+  if (textHash === meta.textHash) return { ok: true, version: meta.version };
+
+  const dir = resumeLibraryItemDir(profile, tag);
+  const next: ResumeMeta = { ...meta, version: meta.version + 1, textHash, edited: true, editedAt: new Date().toISOString() };
+  // Write to a temp file and rename so a failed write never leaves half a resume.
+  const staging = path.join(dir, `${TEMP_PREFIX}${randomUUID()}`);
+  try {
+    await fs.writeFile(staging, cleaned, "utf-8");
+    await fs.rename(staging, path.join(dir, TEXT_FILE));
+  } catch (err) {
+    await fs.rm(staging, { force: true });
+    throw err;
+  }
+  await fs.writeFile(path.join(dir, META_FILE), JSON.stringify(next, null, 2), "utf-8");
+  return { ok: true, version: next.version };
+}
+
+// Exact match only: a changed or repeated line must never be replaced by guess.
+export function applyRewrite(text: string, original: string, suggested: string): RewriteResult {
+  const target = original.trim();
+  if (target === "") return { ok: false, reason: "not_found" };
+  const first = text.indexOf(target);
+  if (first === -1) return { ok: false, reason: "not_found" };
+  if (text.indexOf(target, first + target.length) !== -1) return { ok: false, reason: "ambiguous" };
+  return { ok: true, text: text.slice(0, first) + suggested.trim() + text.slice(first + target.length) };
 }

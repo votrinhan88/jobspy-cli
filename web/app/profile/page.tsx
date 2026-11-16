@@ -171,9 +171,6 @@ export default function ProfilePage() {
     <div className="page-content">
       <header className="page-header">
         <h1 className="page-title">Profiles</h1>
-        <p className="page-subtitle">
-          Each profile is a separate job-search campaign with its own jobs and config.
-        </p>
       </header>
 
       <form onSubmit={handleCreate} className="create-form">
@@ -191,7 +188,6 @@ export default function ProfilePage() {
           {creating ? "Creating..." : "Create"}
         </button>
       </form>
-      <p className="hint">Letters, digits, hyphens, underscores only.</p>
 
       {profiles.length > 0 && (
         <section className="section" style={{ marginTop: "32px" }}>
