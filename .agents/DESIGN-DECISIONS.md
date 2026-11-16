@@ -351,3 +351,9 @@ For full UI conventions and page specs, see `.agents/SPEC.md`.
 
 - **Roles** - Jobs triages untriaged jobs. Applications holds the jobs the user committed to, Shortlisted and later. The Applications table view stays (Kanban, Table, Gantt). The user did not ask to remove it. Both tables end in a visible Action column.
 - **One table** - `JobsTable` serves Jobs. Tracked rows there carry the next-stage button and the status menu.
+
+## 2026-11-16 - Board Discovery, Kanban Order And Pasted Resumes
+
+- **Suggest boards from the jobs already saved** - the Scrape page reads ATS links from the job rows and offers each board that is not configured yet. The jobs already say where the user looks, so no search is needed. Dismiss hides a board for good, so the list does not repeat the same suggestion after each scrape.
+- **Kanban order is the age in the column** - cards sort by `status_updated_at`, oldest first, so the card that has waited longest is at the top. A moved card goes to the bottom of its new column. The drop slot is the last child of the column, so it sits where the card lands. Column heights stay fixed during a drag so the target does not move under the pointer. This replaces the earlier drop rule that validated targets against `NEXT_STATUSES`, which was removed on 2026-09-02.
+- **Pasted text keeps an original** - a pasted resume is stored as `original.txt`, the same as `text.txt`. The file layout then has the same shape for every import, and a resume never has to be special-cased when it is read back.

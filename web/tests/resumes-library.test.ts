@@ -163,3 +163,16 @@ describe("deleteResume", () => {
     expect(await deleteResume("alice", "a")).toEqual({ ok: false, reason: "not_found" });
   });
 });
+
+describe("deleting a fork", () => {
+  it("keeps the root's original file, text and fork link of its other forks", async () => {
+    await importFile("alice", "root", "cv.md", bytes("# Jane\n\nPython"));
+    await importText("alice", "fork-a", "A text", "root");
+    await importText("alice", "fork-b", "B text", "root");
+    await deleteResume("alice", "fork-a");
+    await deleteResume("alice", "fork-b");
+    expect((await readOriginal("alice", "root"))?.ext).toBe("md");
+    expect(await readResumeText("alice", "root")).toContain("Python");
+    expect((await listResumes("alice")).map((m) => m.tag)).toEqual(["root"]);
+  });
+});

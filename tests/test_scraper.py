@@ -189,7 +189,7 @@ class TestGeoCache:
         cache_path = tmp_path / ".geocache.json"
         cache_path.write_text(json.dumps({"Sydney, Australia": "Sydney, Australia"}))
         monkeypatch.setattr(scraper, "GEOCACHE_PATH", str(cache_path))
-        geocode_spy = mocker.patch.object(scraper, "_geocode_one")
+        geocode_spy = mocker.patch.object(scraper._geocoder, "_geocode_one")
 
         df = make_df()
         scraper.get_location_map(df)
@@ -200,7 +200,7 @@ class TestGeoCache:
         cache_path = tmp_path / ".geocache.json"
         cache_path.write_text("{}")
         monkeypatch.setattr(scraper, "GEOCACHE_PATH", str(cache_path))
-        mocker.patch.object(scraper, "_geocode_one", return_value=("Sydney, Australia", "Sydney, Australia"))
+        mocker.patch.object(scraper._geocoder, "_geocode_one", return_value=("Sydney, Australia", "Sydney, Australia"))
 
         df = make_df()
         result = scraper.get_location_map(df)
@@ -211,7 +211,7 @@ class TestGeoCache:
         cache_path = tmp_path / ".geocache.json"
         cache_path.write_text("{}")
         monkeypatch.setattr(scraper, "GEOCACHE_PATH", str(cache_path))
-        mocker.patch.object(scraper, "_geocode_one", return_value=("Sydney, Australia", "Sydney, Australia"))
+        mocker.patch.object(scraper._geocoder, "_geocode_one", return_value=("Sydney, Australia", "Sydney, Australia"))
 
         df = make_df()
         scraper.get_location_map(df)

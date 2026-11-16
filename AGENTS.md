@@ -8,6 +8,8 @@ Always follow the instructions in `.agents/skills/asd-ste100/skill.md` for all t
 
 Always follow the instructions in `.agents/skills/test-driven-development/skill.md` when implementing any feature or bugfix.
 
+Always follow the instructions in `.agents/skills/radio-discipline/SKILL.md` for every message to the user.
+
 ## UI/UX Skills (invoke when doing web app work)
 
 - `.agents/skills/design/SKILL.md` — visual design, layouts, component design
