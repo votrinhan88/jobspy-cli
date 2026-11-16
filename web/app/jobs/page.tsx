@@ -13,6 +13,7 @@ import {
 } from "@/lib/jobs-view";
 import { StatusMenu } from "@/components/status-menu";
 import { useChangeStatus } from "@/components/use-change-status";
+import { ResumeFit } from "@/app/jobs/_components/resume-fit";
 
 function formatSalary(job: Job): string | null {
   const min = job.min_amount ? parseFloat(job.min_amount) : null;
@@ -206,6 +207,8 @@ function JobDrawer({
               <span>{extra["company_industry"]}</span>
             </div>
           )}
+
+          <ResumeFit jobId={job.job_id} key={job.job_id} />
 
           <div className="drawer-actions">
             {extra["job_url_direct"] && (

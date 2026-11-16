@@ -42,6 +42,7 @@ const CONFIG = {
   title_exclude: [],
   exclude_companies: [],
   schedule: null,
+  fetch_linkedin_description: true,
 };
 
 let killSpy: ReturnType<typeof vi.spyOn>;
@@ -95,6 +96,19 @@ describe("startScrape", () => {
     await startScrape("alice");
     const args: string[] = spawn.mock.calls[0][1];
     expect(args[args.indexOf("--save_path") + 1]).toBe("/custom-data/alice/jobs.csv");
+  });
+
+  it("asks for LinkedIn descriptions when the option is on", async () => {
+    readScrapeStatus.mockResolvedValue({ status: "idle" });
+    await startScrape("alice");
+    expect(spawn.mock.calls[0][1]).toContain("--fetch_description");
+  });
+
+  it("does not ask for LinkedIn descriptions when the option is off", async () => {
+    readScrapeStatus.mockResolvedValue({ status: "idle" });
+    readConfig.mockResolvedValue({ ...CONFIG, fetch_linkedin_description: false });
+    await startScrape("alice");
+    expect(spawn.mock.calls[0][1]).not.toContain("--fetch_description");
   });
 
   it("marks the run as failed when the process cannot start", async () => {

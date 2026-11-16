@@ -13,7 +13,6 @@ from geocoder import Geocoder
 
 class JobScraper:
     BLACKLIST = [
-        "description",
         "company_logo",
         "company_url_direct",
         "company_addresses",
@@ -87,7 +86,7 @@ class JobScraper:
         + `hours_old`: Filters jobs by the number of hours since posted (ZipRecruiter and Glassdoor
             round up to next day).
         + `verbose`: Options: 0 (errors only), 1 (errors + warnings), 2 (all logs, default).
-        + `linkedin_fetch_description`: Fetches full description and direct job URL for LinkedIn
+        + `fetch_description`: Fetches the full description for boards that leave it out of search results
             (increases requests by O(n)).
         + `linkedin_company_ids`: Searches for LinkedIn jobs with specific company IDs.
         + `country_indeed`: Filters the country on Indeed & Glassdoor (see below for correct
@@ -182,6 +181,8 @@ class JobScraper:
                     # Update job data fields; preserve protected columns from existing row.
                     for col in existing_index.columns:
                         if col not in self._PRESERVE_ON_UPSERT and col in row.index:
+                            if col == "description" and not self._has_text(row[col]):
+                                continue
                             existing_index[col] = existing_index[col].astype(object)
                             existing_index.at[url, col] = row[col]
                 else:
@@ -198,6 +199,10 @@ class JobScraper:
         if self.verbose >= 1:
             print(f"Appended: {len(combined) - before} new jobs ({len(combined)} total)")
         return combined
+
+    @staticmethod
+    def _has_text(value) -> bool:
+        return pd.notna(value) and str(value).strip() != ""
 
     def _scrape_pair(self, job: str, location: str, site_name: list, results_wanted: int, **kwargs) -> pd.DataFrame:
         df = scrape_jobs(

@@ -47,10 +47,15 @@ class TestCleanJobList:
         assert result.empty
 
     def test_blacklisted_columns_are_dropped(self, scraper):
+        df = make_df(company_logo=["http://logo.png"], skills=["python"])
+        result = scraper.clean_job_list(df)
+        assert "company_logo" not in result.columns
+        assert "skills" not in result.columns
+
+    def test_description_is_kept(self, scraper):
         df = make_df(description=["long text"], company_logo=["http://logo.png"])
         result = scraper.clean_job_list(df)
-        assert "description" not in result.columns
-        assert "company_logo" not in result.columns
+        assert result["description"].iloc[0] == "long text"
 
     def test_whitelisted_columns_move_to_front(self, scraper):
         df = make_df(extra_col=["x"])
@@ -533,6 +538,43 @@ class TestStatusColumns:
         df = make_df()
         result = scraper._add_metadata(df)
         assert result["status_updated_at"].iloc[0] == ""
+
+
+class TestUpsertDescription:
+    def test_known_job_gets_the_new_description(self, scraper, tmp_path):
+        save_path = str(tmp_path / "jobs.csv")
+        existing = make_df(description=["old text"])
+        existing.to_csv(save_path, index=False)
+        updated = make_df(description=["new text"])
+        result = scraper._upsert(updated, save_path, overwrite=False)
+        assert result["description"].iloc[0] == "new text"
+
+    def test_empty_new_description_keeps_the_old_one(self, scraper, tmp_path):
+        save_path = str(tmp_path / "jobs.csv")
+        existing = make_df(description=["old text"])
+        existing.to_csv(save_path, index=False)
+        updated = make_df(description=[None])
+        result = scraper._upsert(updated, save_path, overwrite=False)
+        assert result["description"].iloc[0] == "old text"
+
+    def test_missing_description_column_keeps_the_old_one(self, scraper, tmp_path):
+        save_path = str(tmp_path / "jobs.csv")
+        existing = make_df(description=["old text"])
+        existing.to_csv(save_path, index=False)
+        result = scraper._upsert(make_df(max_amount=[200000]), save_path, overwrite=False)
+        assert result["description"].iloc[0] == "old text"
+        assert result["max_amount"].iloc[0] == 200000
+
+    def test_description_update_still_preserves_status(self, scraper, tmp_path):
+        save_path = str(tmp_path / "jobs.csv")
+        existing = make_df(description=["old text"])
+        existing["status"] = "applied"
+        existing.to_csv(save_path, index=False)
+        updated = make_df(description=["new text"])
+        updated["status"] = ""
+        result = scraper._upsert(updated, save_path, overwrite=False)
+        assert result["status"].iloc[0] == "applied"
+        assert result["description"].iloc[0] == "new text"
 
 
 class TestUpsertPreservesMetadata:

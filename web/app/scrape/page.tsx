@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { ScrapeConfig } from "@/lib/config";
 import type { ScrapeStatus } from "@/lib/scrape-status";
 import { ScheduleSelect } from "@/app/scrape/_components/schedule-select";
+import { FetchDescriptionOption } from "@/app/scrape/_components/fetch-description-option";
 
 function formatDuration(started: string | null, finished: string | null): string {
   if (!started || !finished) return "—";
@@ -476,6 +477,11 @@ export default function ScrapePage() {
             ))}
           </div>
         </div>
+
+        <FetchDescriptionOption
+          checked={config.fetch_linkedin_description}
+          onChange={(v) => updateConfig({ fetch_linkedin_description: v })}
+        />
 
         <LinesInput
           label="Exclude titles containing"

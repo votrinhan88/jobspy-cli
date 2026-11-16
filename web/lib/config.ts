@@ -10,6 +10,7 @@ export interface ScrapeConfig {
   title_exclude: string[];
   exclude_companies: string[];
   schedule: string | null;
+  fetch_linkedin_description: boolean;
 }
 
 const DEFAULTS: ScrapeConfig = {
@@ -21,6 +22,7 @@ const DEFAULTS: ScrapeConfig = {
   title_exclude: [],
   exclude_companies: [],
   schedule: null,
+  fetch_linkedin_description: true,
 };
 
 export async function readConfig(profile: string): Promise<ScrapeConfig> {

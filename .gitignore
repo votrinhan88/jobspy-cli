@@ -8,7 +8,7 @@ __pycache__/
 
 # Profile data (user-specific, not committed)
 data/
-resumes/
+/resumes/
 
 # Next.js
 web/.next/

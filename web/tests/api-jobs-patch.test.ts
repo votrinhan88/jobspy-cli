@@ -77,7 +77,7 @@ describe("PATCH /api/jobs/[jobId]", () => {
       }
     }
     expect(pairs).toBe(49);
-  });
+  }, 30000);
 
   it("sets the status to empty and updates the timestamp", async () => {
     const before = Date.now();

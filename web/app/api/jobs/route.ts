@@ -7,5 +7,7 @@ export async function GET() {
     return Response.json({ error: "No active profile" }, { status: 400 });
   }
   const jobs = await readJobs(jobsCsvPath(profile));
-  return Response.json(jobs);
+  return Response.json(
+    jobs.map((job) => Object.fromEntries(Object.entries(job).filter(([key]) => key !== "description")))
+  );
 }

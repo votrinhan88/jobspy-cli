@@ -7,14 +7,12 @@ import "./globals.css";
 
 const inter = Inter({
   subsets: ["latin"],
-  weight: ["400", "500", "600"],
   display: "swap",
   variable: "--font-inter",
 });
 
 const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
-  weight: ["400", "500"],
   display: "swap",
   variable: "--font-jetbrains-mono",
 });

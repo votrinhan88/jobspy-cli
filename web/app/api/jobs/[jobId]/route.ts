@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 import { getActiveProfile, jobsCsvPath } from "@/lib/profile";
-import { updateJob } from "@/lib/csv";
+import { readJobs, updateJob } from "@/lib/csv";
 import { isStatus } from "@/lib/status";
 import { appendStatusLog } from "@/lib/status-log";
 
@@ -16,6 +16,23 @@ function isIsoTimestamp(value: string): boolean {
     date.getUTCMonth() === m - 1 &&
     date.getUTCDate() === d
   );
+}
+
+export async function GET(
+  _request: NextRequest,
+  { params }: { params: Promise<{ jobId: string }> }
+) {
+  const profile = await getActiveProfile();
+  if (!profile) {
+    return Response.json({ error: "No active profile" }, { status: 400 });
+  }
+
+  const { jobId } = await params;
+  const job = (await readJobs(jobsCsvPath(profile))).find((row) => row.job_id === jobId);
+  if (!job) {
+    return Response.json({ error: "Job not found" }, { status: 404 });
+  }
+  return Response.json({ ...job, description: job.description ?? "" });
 }
 
 export async function PATCH(

@@ -125,11 +125,14 @@ One line per successful status change, appended by `PATCH /api/jobs/[jobId]`. Un
   "workers": 4,
   "title_exclude": [],
   "exclude_companies": [],
-  "schedule": null
+  "schedule": null,
+  "fetch_linkedin_description": true
 }
 ```
 
-All fields except `schedule` match existing CLI arguments. The web app reads this file as form defaults and writes it back on change.
+`fetch_linkedin_description` (default `true`, also for files without the field) adds `--fetch_description` to the scrape. LinkedIn gives no job text without it, and scrapes get slower. The scraper keeps the `description` column in `jobs.csv`. On upsert a known job gets the new description only when it is not empty, so a scrape without text never erases an old description. `description` is not in `_PRESERVE_ON_UPSERT`.
+
+All fields except `schedule` and `fetch_linkedin_description` match existing CLI arguments. The web app reads this file as form defaults and writes it back on change.
 
 `schedule` is a cron expression (for example `0 8 * * *`) or `null` (off). A missing field reads as `null`. The server registers one `node-cron` task per profile that has a schedule. It registers all saved schedules at startup (`web/instrumentation.ts`) and re-registers a profile when `PUT /api/scrape/config` saves a change. A scheduled run uses the same `startScrape` function as `POST /api/scrape/run`, so it skips when a scrape is already running for that profile. Deleting a profile unregisters its task. Renaming a profile unregisters the old task and registers the saved schedule under the new name. Schedules use server local time and fire only while the server process runs. `PUT /api/scrape/config` rejects a schedule while `job` is empty. A scheduled run with no keywords skips and logs one line.
 
@@ -177,6 +180,11 @@ Written by the web server (`lib/scrape-runner.ts`). Read by the web app via poll
 - Search (labelled) matches title, company and location. Every word must match. The counter reads "{n} of {total} jobs".
 - New rows have "Shortlist" and "Skip". A skipped job stays in the list with its chip. Each change shows the undo toast.
 - The detail drawer is a modal dialog: `role="dialog"`, `aria-modal`, labelled by the job title. Focus moves into it and returns to the row on close. Tab stays inside. Escape, the close button and a backdrop click close it. It has Shortlist, Skip and the status menu.
+- The drawer has a short "Resume fit" summary (`web/app/jobs/_components/resume-fit.tsx`): the best resume tag, its keyword score and a link "Open resume review". A job without a description shows a note. A profile without resumes links to the Resume page.
+- The review page `/jobs/[jobId]/review` shows one resume beside its fit report. A tag select picks the resume (default: the best keyword match). The left side shows the original file (a PDF in the browser viewer, other types as text). The right side is `web/app/jobs/_components/fit-report.tsx`: keyword score with matched and missing words, then the Claude analysis, then the "Submitted with this resume" checkbox.
+- "Analyse fit" asks for a confirm step that shows the size, then calls the Claude API (`web/lib/analysis.ts`). The key is `ANTHROPIC_API_KEY` and the model is `claude-haiku-5-5` unless `ANTHROPIC_MODEL` is set. The request sends the job text and the whole resume text, including contact details. The result has a score (an alignment hint, not a hiring prediction), a summary, strengths, a requirements table (requirement, evidence, verdict `strong`, `partial`, `weak` or `missing`, reasoning), gaps with fix ideas, and suggested wording (original line and better line, each with a Copy button). The app never edits a resume.
+- A saved result lives in `data/{profile}/analysis/{jobId}--{tag}.json` with the resume version, the resume text hash and the job description hash. When the resume text or the job text changes, the page marks the saved result "out of date". Re-run replaces it. Renaming a resume moves its results, and deleting a resume deletes them. Without the key the page shows a notice and no button.
+- The "Submitted with this resume" checkbox records the tag, the resume version and the text hash in `data/{profile}/submitted.json`. The page warns when the resume text changed after the submission.
 - Pure view logic lives in `web/lib/jobs-view.ts` (`sortJobs`, `filterJobs`, `statusCounts`).
 
 ### Applications
@@ -201,9 +209,13 @@ Written by the web server (`lib/scrape-runner.ts`). Read by the web app via poll
 
 ### Resume
 
-**Function:** Manage the CV for the active profile.
+**Function:** Keep a library of resumes, one per tag, for the active profile. The app does not edit or build resumes. You write them in your own tool and import the file.
 
-- Upload CV (PDF or Markdown). Replaces existing file at `data/{profile}/cv.pdf`.
+- A tag is a kebab-case label for one resume version (for example a role or a company). Each tag holds one resume. Importing under an existing tag replaces it and raises the version when the text differs.
+- Import accepts `.pdf`, `.tex`, `.md` and `.txt` files up to 5 MB, or pasted text. The app keeps the original file and extracts plain text. PDF text comes from `pdfjs-dist`. LaTeX commands are stripped from `.tex` text. The extracted text feeds the keyword match and the Claude analysis.
+- The page lists the resumes (file name, version, import date) and has View, Download, Replace (fills the import form), Rename and Delete (inline confirm). The viewer shows a PDF in the browser and other types as text.
+- Files: `data/{profile}/resume-library/{tag}/` with `original.<ext>`, `text.txt` and `meta.json` (`tag`, `fileName`, `ext`, `importedAt`, `version`, `textHash`). Logic lives in `web/lib/resumes/` (`extract.ts`, `library.ts`).
+- The LaTeX builder, its template and `pdflatex` are gone. Old `data/{profile}/resumes/*.json` files and `cv.pdf` / `cv.md` stay on disk and nothing reads them.
 
 ### Profile
 
@@ -223,7 +235,11 @@ Written by the web server (`lib/scrape-runner.ts`). Read by the web app via poll
 
 | Method | Path | Function |
 |--------|------|---------|
-| `GET` | `/api/jobs` | Read `jobs.csv` for active profile |
+| `GET` | `/api/jobs` | Read `jobs.csv` for active profile. Rows have no `description` key, to keep the list light |
+| `GET` | `/api/jobs/[jobId]` | One row with its `description` (empty string when none). 404 unknown job |
+| `GET` | `/api/jobs/[jobId]/match` | `{ hasDescription, ranking }`. Ranking is a list of `{ tag, score, matched, missing }`, best first. Empty when the job has no description or there are no tags |
+| `GET` | `/api/jobs/[jobId]/analysis?tag=` | `{ available, sendChars, saved, stale }`. 400 bad tag, 404 unknown job or tag |
+| `POST` | `/api/jobs/[jobId]/analysis` | Body `{ tag }`. Runs and saves the gap analysis. 400 bad tag, 404 unknown job or tag, 422 no description, 503 no `ANTHROPIC_API_KEY`, 502 API failure. Returns `{ model, created_at, tag, resume_version, resume_hash, job_hash, analysis }` |
 | `PATCH` | `/api/jobs/[jobId]` | Body `{ status, status_updated_at? }`. Any status to any status, including `""`. `status_updated_at` is optional: an ISO 8601 date and time, or `""` (undo of a new job); absent means now; invalid gives 422. Unknown status gives 422, unknown job 404, no profile 400. Keeps other columns and row order. Appends one line to `status_log.jsonl`. Returns the updated row. |
 | `GET` | `/api/jobs/log` | Read `status_log.jsonl` for the active profile; returns a list of `{ job_id, from, to, at }` |
 | `GET` | `/api/scrape/status` | Read `scrape_status.json` |
@@ -231,8 +247,11 @@ Written by the web server (`lib/scrape-runner.ts`). Read by the web app via poll
 | `GET` | `/api/scrape/log` | Read `scrape.log` for the active profile (plain text) |
 | `GET` | `/api/scrape/config` | Read `scrape_config.json` |
 | `PUT` | `/api/scrape/config` | Validate `schedule` (400 on an invalid cron expression, nothing saved), write `scrape_config.json`, re-register the profile schedule |
-| `GET` | `/api/resume` | Read CV file metadata |
-| `POST` | `/api/resume` | Upload and save CV file |
+| `GET` | `/api/resumes` | Returns `{ resumes }` (details of each resume) |
+| `POST` | `/api/resumes` | Multipart body: `tag` and `file`, or `tag` and `text`. 200 `{ tag, version }`, 400 bad tag or no input, 413 over 5 MB, 415 unsupported type, 422 empty or unreadable file |
+| `GET` `PATCH` `DELETE` | `/api/resumes/[tag]` | Read `{ meta, text }` (404 unknown), rename (body `{ tag }`; 400 / 404 / 409; moves analyses and the submitted record), delete (404 unknown; deletes analyses) |
+| `GET` | `/api/resumes/[tag]/file` | The original file. Inline by default, `?download=1` for an attachment. 404 unknown |
+| `GET` `PUT` | `/api/jobs/[jobId]/submitted` | Read `{ submitted, changed }`. Save body `{ tag }` records the tag with its current version and hash, `{ tag: null }` clears it. 400 / 404 |
 | `GET` | `/api/profiles` | List all profile directories; returns `{ profiles, active }` |
 | `POST` | `/api/profiles` | Create a new profile |
 | `POST` | `/api/profiles/switch` | Set active profile cookie |
@@ -282,7 +301,7 @@ Concurrent runs against the same profile are blocked — "Run scrape" button is 
 | Item | Deferred until |
 |------|---------------|
 | Job scoring (feature 4) | After semantic CV/JD matching (feature 6 or 9) |
-| Gap analysis via Claude API (feature 6) | After Resume page ships |
+| Gap analysis via Claude API (feature 6) | Done on 2026-11-02 (Jobs drawer, "Resume fit") |
 | Semantic job search (feature 9) | Dropped on 2026-11-01. Reopen if text search misses wanted jobs |
 | SQLite migration | When CSV flat-file access becomes a bottleneck |
 | Authentication | If the app is ever exposed beyond localhost |

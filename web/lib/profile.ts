@@ -1,6 +1,7 @@
 import fs from "fs/promises";
 import path from "path";
 import { cookies } from "next/headers";
+import { isValidTag } from "./tag";
 
 export const PROFILE_COOKIE = "active_profile";
 export const PROFILE_COOKIE_OPTIONS = { httpOnly: true, path: "/", sameSite: "lax" } as const;
@@ -81,6 +82,36 @@ export function statusLogPath(profile: string): string {
 
 export function cvPath(profile: string, ext: "pdf" | "md" = "pdf"): string {
   return profilePath(profile, `cv.${ext}`);
+}
+
+export function submittedPath(profile: string): string {
+  return profilePath(profile, "submitted.json");
+}
+
+
+export function resumeLibraryDir(profile: string): string {
+  return profilePath(profile, "resume-library");
+}
+
+export function resumeLibraryItemDir(profile: string, tag: string): string {
+  if (!isValidTag(tag)) {
+    throw new Error(`Invalid resume tag: ${JSON.stringify(tag)}`);
+  }
+  return profilePath(profile, "resume-library", tag);
+}
+
+export function analysisDir(profile: string): string {
+  return profilePath(profile, "analysis");
+}
+
+export function analysisPath(profile: string, jobId: string, tag: string): string {
+  if (!/^[a-zA-Z0-9_-]{1,120}$/.test(jobId)) {
+    throw new Error(`Invalid job id: ${JSON.stringify(jobId)}`);
+  }
+  if (!isValidTag(tag)) {
+    throw new Error(`Invalid resume tag: ${JSON.stringify(tag)}`);
+  }
+  return profilePath(profile, "analysis", `${jobId}--${tag}.json`);
 }
 
 export async function createProfile(name: string): Promise<void> {

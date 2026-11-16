@@ -124,6 +124,7 @@ function buildArgs(config: Awaited<ReturnType<typeof readConfig>>, savePath: str
   args.push("--workers", String(config.workers));
   if (config.title_exclude.length > 0) args.push("--title_exclude", ...config.title_exclude);
   if (config.exclude_companies.length > 0) args.push("--exclude_companies", ...config.exclude_companies);
+  if (config.fetch_linkedin_description) args.push("--fetch_description");
   args.push("--save_path", savePath);
 
   return args;

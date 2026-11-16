@@ -5,7 +5,7 @@ description = "A Python wrapper for JobSpy to scrape job postings from multiple 
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
-    "python-jobspy>=1.1.82",
+    "python-jobspy>=1.4.1",
     "geopy>=2.4.1",
     "pandas>=2.0",
 ]

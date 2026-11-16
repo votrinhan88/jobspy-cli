@@ -53,3 +53,36 @@ For full UI conventions and page specs, see `.claude/SPEC.md`.
 - **No late writes** - the final status write skips when the profile folder is gone. A scrape that ends after a delete or rename cannot recreate the folder.
 - **Keywords required** - `startScrape` returns `no_keywords` before it writes anything. The manual route answers 400. A schedule cannot be saved while `job` is empty. This stops a scheduled task from spawning a failing Python process every tick.
 - **Save path** - the scrape saves to `jobsCsvPath(profile)`, so `JOBSPY_DATA_DIR` applies to scrape output too.
+
+## 2026-11-02 - LaTeX Resume Builder
+
+- **Builder replaces the upload** - the Resume page builds resumes from fields. The CV upload UI and routes are gone. Old files stay on disk. The gap analysis plan (feature 6) must read the resume files in `data/{profile}/resumes/`.
+- **One resume per tag, independent copies** - a tag is free text turned into kebab-case. A copy shares nothing with its source, so tailoring for one company never changes another resume. A base-plus-overrides model was rejected as too complex for one user.
+- **LaTeX through pdflatex** - the user wants an Overleaf-like flow without math. Browser print and server-side PDF libraries were rejected. `pdflatex` is detected on `PATH` or through `JOBSPY_PDFLATEX`. Without it the editor is hidden. Tectonic was considered and dropped because `pdflatex` is already installed.
+- **Escape field text, trust the template** - field text is escaped, and only `**bold**`, `*italic*` and `[text](url)` become LaTeX. Links allow `http`, `https` and `mailto` only. The template is the user's own source and may hold any LaTeX. Compiles use `-no-shell-escape`, a temporary folder and a timeout. The app is local and single-user. A template can still read local files with `\input`.
+- **Shared template, per-tag content** - the look is one `template.tex` per profile, so every resume looks the same. Section order, visibility and content are per tag. Fonts and colors can move into the template or the data later.
+- **Own template syntax** - `<<key>>` delimiters avoid the clash with LaTeX braces. A small renderer in `lib/resume/template.ts` replaces a template library. Lines that hold only a section tag are removed.
+- **Live preview rules** - the first compile of a tag starts at once. Later edits wait 3 seconds of idle time. A newer compile cancels an older one. A failed compile keeps the last good PDF.
+- **Seed data** - the first resume of the main profile came from the user's own PDF. It lives in `data/`, which git ignores. `resumes/` at the repo root is ignored too, because it holds personal PDFs.
+
+## 2026-11-02 - Resume Fit and Gap Analysis
+
+- **Descriptions are stored** - the scraper kept no job text (`description` was blacklisted), so matching had only titles. `description` now stays in `jobs.csv`. The file grows. Old rows get text when a later scrape sees the same job again.
+- **Empty never erases** - on upsert a known job takes a new description only when it has text. A scrape without LinkedIn text must not wipe a good description. `_PRESERVE_ON_UPSERT` is unchanged, because a changed description is normal job data.
+- **LinkedIn text is opt-out** - `fetch_linkedin_description` defaults to `true`. LinkedIn gives no text without the extra page fetch, and most of the user's jobs come from LinkedIn. The cost is slower scrapes and a higher chance of rate limits. The scrape page has a checkbox.
+- **Light list, heavy detail** - `GET /api/jobs` drops `description` so the table stays small. One job's text comes from `GET /api/jobs/[jobId]`.
+- **Offline matching first** - the tag score is keyword overlap with a stop-word list and simple plural folding. It is free, fast and testable. It is a hint, not a judgment. The share of the job's words found in the resume is the score, so a long generic job text lowers it.
+- **Claude only on request** - gap analysis runs on a click, after a confirm step that shows the size. The user chose to send everything, including contact details, and to default to the cheapest model (`claude-haiku-5-5`, override with `ANTHROPIC_MODEL`). The key is only `ANTHROPIC_API_KEY`, read inside the handler. Errors never contain it. The API is called with plain `fetch`, so there is no new dependency.
+- **Saved per job and tag** - results live in `data/{profile}/analysis/` so repeat views cost nothing. Re-run replaces the file. Fix ideas are read-only. The app never edits a resume from a model reply, because a wrong claim could end up in an application.
+
+## 2026-11-03 - Resume Library and Review (supersedes the LaTeX Resume Builder)
+
+- **Import, not build** - the user found the builder over-engineered and friction-heavy. They write resumes in their own tool. The app imports the file. The builder, its template, the live preview and `pdflatex` were removed. Git history keeps them. The builder entry above no longer applies.
+- **Three separate layers** - original file, extracted text and analysis result are stored apart (`original.<ext>`, `text.txt` and `meta.json` under `resume-library/{tag}/`; results under `analysis/`). A structured resume model (JSON sections) was rejected for now: PDF-to-structure parsing is unreliable, and plain text is enough for matching and for Claude. The three layers leave room to add structure later without a rewrite.
+- **Formats** - PDF, TEX, MD and TXT, plus pasted text. DOCX is out. PDF text comes from `pdfjs-dist`, which runs in Node on any machine. `pdftotext` was rejected because it needs a local install.
+- **One tag, one resume** - a replace keeps the tag and raises the version when the text hash differs. Versions of one resume are not kept as files. Separate versions use separate tags.
+- **Analyses carry version stamps** - a saved result stores the resume version, the resume text hash and the job description hash. The page marks a result "out of date" when a hash differs. An old result never shows as current for a changed resume or job. Rename moves results with the tag, and delete removes them.
+- **Evidence over a score** - the analysis returns a requirements table (requirement, evidence, verdict, reasoning) and suggested wording. The score is an alignment hint, and the page says it does not predict a hiring result. The app never edits a resume from a model reply. The user copies wording by hand.
+- **Side by side** - a full page at `/jobs/[jobId]/review` shows the original resume beside the report. The drawer keeps a short summary with a link.
+- **Submitted record** - `data/{profile}/submitted.json` stores which resume version went with each job. It is a side file, so `jobs.csv` columns and the engine invariants stay untouched. The page warns when the resume changed after the submission.
+- **JobSpy 1.4.1** - the dependency moved from 1.1.82. The flag `fetch_description` replaces the deprecated `linkedin_fetch_description`. The config field name `fetch_linkedin_description` stays for saved configs.

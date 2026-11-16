@@ -32,7 +32,7 @@ def build_parser() -> argparse.ArgumentParser:
     auxiliary_group.add_argument("--description_format", type=str, choices=["markdown", "html"], default="markdown", help="Format type of the job descriptions")
     auxiliary_group.add_argument("--offset", type=int, help="Start search from an offset")
     auxiliary_group.add_argument("--hours_old", type=int, help="Filter jobs by hours since posted")
-    auxiliary_group.add_argument("--linkedin_fetch_description", action="store_true", help="Fetch full description and direct job URL for LinkedIn")
+    auxiliary_group.add_argument("--fetch_description", "--linkedin_fetch_description", dest="fetch_description", action="store_true", help="Fetch the full job description for boards that leave it out of search results")
     auxiliary_group.add_argument("--linkedin_company_ids", type=int, nargs='+', help="LinkedIn company IDs")
     auxiliary_group.add_argument("--country_indeed", type=str, help="Country filter for Indeed & Glassdoor")
     auxiliary_group.add_argument("--enforce_annual_salary", action="store_true", help="Convert wages to annual salary")
@@ -76,7 +76,7 @@ def main() -> None:
         "description_format": args.description_format,
         "offset": args.offset,
         "hours_old": args.hours_old,
-        "linkedin_fetch_description": args.linkedin_fetch_description,
+        "fetch_description": args.fetch_description,
         "linkedin_company_ids": args.linkedin_company_ids,
         "country_indeed": args.country_indeed,
         "enforce_annual_salary": args.enforce_annual_salary,
