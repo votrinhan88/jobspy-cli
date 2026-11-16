@@ -2,6 +2,8 @@ import type { Job } from "@/lib/csv";
 
 export type FacetKey = "country" | "city" | "work_mode" | "seniority" | "employment_type";
 
+export type FacetSelections = Record<FacetKey, string[]>;
+
 export const FACET_FILTERS: { key: FacetKey; label: string }[] = [
   { key: "country", label: "Country" },
   { key: "city", label: "City" },
@@ -42,9 +44,28 @@ export function facetValueLabel(key: FacetKey, value: string): string {
   return VALUE_LABELS[key]?.[text] ?? text;
 }
 
-export function facetOptions(jobs: Job[], key: FacetKey): string[] {
+function matchesOtherFacets(
+  job: Job,
+  key: FacetKey,
+  selections: Partial<FacetSelections>
+): boolean {
+  for (const { key: other } of FACET_FILTERS) {
+    if (other === key) continue;
+    const selected = (selections[other] ?? []).map((value) => value.trim()).filter(Boolean);
+    if (selected.length === 0) continue;
+    if (!selected.includes((job[other] ?? "").trim())) return false;
+  }
+  return true;
+}
+
+export function facetOptions(
+  jobs: Job[],
+  key: FacetKey,
+  selections: Partial<FacetSelections> = {}
+): string[] {
   const values = new Set<string>();
   for (const job of jobs) {
+    if (!matchesOtherFacets(job, key, selections)) continue;
     const value = (job[key] ?? "").trim();
     if (value) values.add(value);
   }

@@ -11,7 +11,19 @@ from facets import (
 
 class TestSplitLocation:
     def test_splits_a_city_and_a_country(self):
-        assert split_location("Hanoi, Vietnam") == ("Vietnam", "Hanoi")
+        assert split_location("Sydney, Australia") == ("Australia", "Sydney")
+
+    def test_uses_one_label_for_a_vietnamese_city(self):
+        assert split_location("Hanoi, Vietnam") == ("Vietnam", "Hà Nội")
+        assert split_location("Ho Chi Minh City, Vietnam") == ("Vietnam", "Hồ Chí Minh")
+
+    def test_drops_the_vietnamese_city_prefix(self):
+        assert split_location("Thành phố Hồ Chí Minh, Việt Nam") == ("Việt Nam", "Hồ Chí Minh")
+        assert split_location("Thành phố Hà Nội, Việt Nam") == ("Việt Nam", "Hà Nội")
+        assert split_location("Thành phố Đà Nẵng, Việt Nam") == ("Việt Nam", "Đà Nẵng")
+        assert split_location("Thành phố Hải Phòng, Việt Nam") == ("Việt Nam", "Hải Phòng")
+        assert split_location("TP. Hồ Chí Minh, Việt Nam") == ("Việt Nam", "Hồ Chí Minh")
+        assert split_location("TP. Vũng Tàu, Việt Nam") == ("Việt Nam", "Vũng Tàu")
 
     def test_a_single_part_is_a_country(self):
         assert split_location("Australia") == ("Australia", "")
@@ -20,8 +32,33 @@ class TestSplitLocation:
         assert split_location("Remote, Australia") == ("Australia", "")
 
     def test_a_metro_area_without_a_country_is_not_a_country(self):
-        assert split_location("Greater Brisbane Area") == ("", "Greater Brisbane")
-        assert split_location("Ho Chi Minh City Metropolitan Area") == ("", "Ho Chi Minh City")
+        assert split_location("Greater Brisbane Area") == ("", "Brisbane")
+        assert split_location("Ho Chi Minh City Metropolitan Area") == ("", "Hồ Chí Minh")
+        assert split_location("Hanoi Capital Region") == ("", "Hà Nội")
+
+    def test_a_state_name_is_not_a_city(self):
+        assert split_location("NSW, Australia") == ("Australia", "")
+        assert split_location("New South Wales, Australia") == ("Australia", "")
+        assert split_location("SA, Australia") == ("Australia", "")
+        assert split_location("South Australia, Australia") == ("Australia", "")
+        assert split_location("VIC, Australia") == ("Australia", "")
+        assert split_location("Queensland, Australia") == ("Australia", "")
+
+    def test_a_city_named_after_a_state_in_another_country_stays(self):
+        assert split_location("Victoria, Canada") == ("Canada", "Victoria")
+
+    def test_merges_metro_and_suburb_names(self):
+        assert split_location("North Sydney, Australia") == ("Australia", "Sydney")
+        assert split_location("Chatswood, Australia") == ("Australia", "Sydney")
+        assert split_location("Parramatta, Australia") == ("Australia", "Sydney")
+        assert split_location("Bella Vista, Australia") == ("Australia", "Sydney")
+        assert split_location("Belrose, Australia") == ("Australia", "Sydney")
+        assert split_location("Melbourne Eastern Suburbs, Australia") == ("Australia", "Melbourne")
+        assert split_location("Greater Brisbane, Australia") == ("Australia", "Brisbane")
+
+    def test_keeps_an_unknown_city(self):
+        assert split_location("Albury, Australia") == ("Australia", "Albury")
+        assert split_location("Bangalore Falls, Australia") == ("Australia", "Bangalore Falls")
 
     def test_recognizes_a_country_with_diacritics(self):
         assert split_location("Việt Nam") == ("Việt Nam", "")
@@ -153,6 +190,18 @@ class TestAddFacets:
         assert out.loc[0, "work_mode"] == "hybrid"
         assert out.loc[0, "seniority"] == "senior"
         assert out.loc[0, "employment_type"] == "full_time"
+
+    def test_writes_one_label_per_city(self):
+        frame = pd.DataFrame(
+            [
+                {"title": "A", "location": "NSW, Australia"},
+                {"title": "B", "location": "Chatswood, Australia"},
+                {"title": "C", "location": "Thành phố Hồ Chí Minh, Việt Nam"},
+            ]
+        )
+        out = add_facets(frame)
+        assert list(out["city"]) == ["", "Sydney", "Hồ Chí Minh"]
+        assert list(out["country"]) == ["Australia", "Australia", "Việt Nam"]
 
     def test_does_not_change_the_input_frame(self):
         frame = pd.DataFrame([{"title": "Data Engineer", "location": "Hanoi, Vietnam"}])

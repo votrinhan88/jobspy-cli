@@ -85,7 +85,7 @@ The web app is the active workstream. See `.agents/SPEC.md` for the full archite
 
 ## Known Constraints
 
-- Glassdoor blocked upstream (HTTP 400, speedyapply/JobSpy#270)
+- Glassdoor works on python-jobspy 1.4.1 (three live probes on 2026-11-05); Cloudflare can still block it
 - ZipRecruiter returns 403 from this IP — geo-block, not a code issue
 - Concurrent scrape runs against the same profile are not supported
 - Job scoring deferred until semantic CV/JD matching is available

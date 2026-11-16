@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   analysisAvailable,
   buildMessages,
+  localModelConfig,
   parseAnalysis,
   resolveModel,
   runAnalysis,
@@ -204,6 +205,118 @@ describe("runAnalysis", () => {
   it("reports a reply that cannot be read", async () => {
     fetchMock.mockResolvedValue(reply("I cannot help with that."));
     const result = await run();
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/could not be read/i);
+  });
+});
+
+describe("localModelConfig", () => {
+  it("is null without LLM_BASE_URL", () => {
+    expect(localModelConfig({})).toBeNull();
+    expect(localModelConfig({ LLM_BASE_URL: "   " })).toBeNull();
+  });
+
+  it("reads the base url, the model and an optional key", () => {
+    expect(localModelConfig({ LLM_BASE_URL: " http://127.0.0.1:8080/v1 " })).toEqual({
+      baseUrl: "http://127.0.0.1:8080/v1",
+      model: "local-model",
+      apiKey: "",
+    });
+    expect(
+      localModelConfig({ LLM_BASE_URL: "http://localhost:8080/v1", LLM_MODEL: "qwen3", LLM_API_KEY: "local" })
+    ).toEqual({ baseUrl: "http://localhost:8080/v1", model: "qwen3", apiKey: "local" });
+  });
+});
+
+describe("the local endpoint in resolveModel and analysisAvailable", () => {
+  it("picks LLM_MODEL ahead of ANTHROPIC_MODEL", () => {
+    expect(
+      resolveModel({ LLM_BASE_URL: "http://127.0.0.1:8080/v1", LLM_MODEL: "qwen3", ANTHROPIC_MODEL: "claude-x" })
+    ).toBe("qwen3");
+  });
+
+  it("counts as available without an Anthropic key", () => {
+    expect(analysisAvailable({ LLM_BASE_URL: "http://127.0.0.1:8080/v1" })).toBe(true);
+    expect(analysisAvailable({ ANTHROPIC_API_KEY: "", LLM_BASE_URL: "http://127.0.0.1:8080/v1" })).toBe(true);
+    expect(analysisAvailable({ ANTHROPIC_API_KEY: "", LLM_BASE_URL: "" })).toBe(false);
+  });
+});
+
+describe("runAnalysis with a local endpoint", () => {
+  const fetchMock = vi.fn();
+  const localReply = (text: string) => ({
+    ok: true,
+    status: 200,
+    json: async () => ({ choices: [{ message: { content: text } }] }),
+  });
+
+  beforeEach(() => {
+    fetchMock.mockReset();
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const runLocal = (apiKey = "") =>
+    runAnalysis({
+      job,
+      resumeText,
+      apiKey,
+      model: "qwen3-8b",
+      baseUrl: "http://127.0.0.1:8080/v1/",
+      fetchImpl: fetchMock,
+    });
+
+  it("posts to chat/completions with a system and a user message", async () => {
+    fetchMock.mockResolvedValue(localReply(JSON.stringify(good)));
+    await runLocal();
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("http://127.0.0.1:8080/v1/chat/completions");
+    expect(init.method).toBe("POST");
+    expect(init.headers["content-type"]).toBe("application/json");
+    expect(init.headers.Authorization).toBeUndefined();
+    const body = JSON.parse(init.body);
+    expect(body.model).toBe("qwen3-8b");
+    expect(body.temperature).toBe(0);
+    expect(body.messages).toHaveLength(2);
+    expect(body.messages[0].role).toBe("system");
+    expect(body.messages[1].role).toBe("user");
+    expect(body.messages[1].content).toContain("Acme Labs");
+  });
+
+  it("sends a bearer token when LLM_API_KEY is set", async () => {
+    fetchMock.mockResolvedValue(localReply(JSON.stringify(good)));
+    await runLocal("local-secret");
+    expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe("Bearer local-secret");
+  });
+
+  it("reads the reply from choices", async () => {
+    fetchMock.mockResolvedValue(localReply(JSON.stringify(good)));
+    expect(await runLocal()).toEqual({ ok: true, analysis: good });
+  });
+
+  it("returns the endpoint error message", async () => {
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 400,
+      json: async () => ({ error: { message: "model not found" } }),
+    });
+    const result = await runLocal();
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toContain("model not found");
+  });
+
+  it("reports a network failure against the endpoint", async () => {
+    fetchMock.mockRejectedValue(new Error("connect ECONNREFUSED"));
+    const result = await runLocal();
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/could not reach/i);
+  });
+
+  it("reports a reply that cannot be read", async () => {
+    fetchMock.mockResolvedValue(localReply("I cannot help with that."));
+    const result = await runLocal();
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error).toMatch(/could not be read/i);
   });

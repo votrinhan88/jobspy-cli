@@ -1,6 +1,6 @@
 # jobspy-cli
 
-A Python CLI wrapper around [JobSpy](https://github.com/speedyapply/JobSpy) that scrapes job postings from LinkedIn, Indeed, ZipRecruiter, and Google Jobs, merges results, deduplicates, geocodes locations, and saves to a single CSV. Glassdoor is disabled upstream (speedyapply/JobSpy#270).
+A Python CLI wrapper around [JobSpy](https://github.com/speedyapply/JobSpy) that scrapes job postings from LinkedIn, Indeed, ZipRecruiter, and Glassdoor, merges results, deduplicates, geocodes locations, and saves to a single CSV. Google Jobs is disabled upstream (speedyapply/JobSpy#284).
 
 ## Always-on Skills
 
@@ -72,6 +72,8 @@ Web:
 - Key deps: `python-jobspy`, `geopy`, `pandas`
 - Dev deps: `pytest`, `pytest-mock`
 - Modules: `scraper.py` (JobScraper), `geocoder.py` (Geocoder), `main.py` (CLI)
+- Agent surface: `jobs_query.py` (filters and `--json` over `jobs.csv`), `mcp_server.py` (MCP stdio, one `search_jobs` tool)
+- Direct company boards: `ats.py` (Greenhouse, Lever and Ashby adapters), `main.py --company provider:board[:Name]`
 
 **Web app** (`web/`)
 

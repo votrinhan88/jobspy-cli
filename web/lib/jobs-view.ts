@@ -1,21 +1,24 @@
 import type { Job, JobStatus } from "@/lib/csv";
 import { STATUSES, isRemote } from "@/lib/status";
+import { isNewInRun } from "@/lib/lifecycle";
 
-export type SortKey = "posted" | "title" | "company" | "location" | "status";
+export type SortKey = "posted" | "title" | "company" | "location" | "status" | "seen" | "salary";
 export type SortDir = "asc" | "desc";
 
 export interface JobFilters {
   query: string;
   statuses: Set<JobStatus>;
   remoteOnly: boolean;
-  country?: string;
-  city?: string;
-  workMode?: string;
-  seniority?: string;
-  employmentType?: string;
+  country?: string[];
+  city?: string[];
+  workMode?: string[];
+  seniority?: string[];
+  employmentType?: string[];
+  newOnly?: boolean;
+  newSince?: string | null;
 }
 
-export type StatusCounts = Record<JobStatus | "all", number>;
+export type StatusCounts = Record<JobStatus | "all" | "new", number>;
 
 export interface LocationParts {
   country: string;
@@ -37,8 +40,9 @@ export interface CountryGroup {
 
 export const DEFAULT_SORT: { key: SortKey; dir: SortDir } = { key: "posted", dir: "desc" };
 
-const FIELD: Record<"posted" | "title" | "company", keyof Job> = {
+const FIELD: Record<"posted" | "title" | "company" | "seen", keyof Job> = {
   posted: "date_posted",
+  seen: "last_seen_at",
   title: "title",
   company: "company",
 };
@@ -81,6 +85,14 @@ export function formatLocation(job: Job): string {
   return parts.reverse().join(", ");
 }
 
+function salaryValue(job: Job): number | null {
+  const top = Number.parseFloat(job.max_amount ?? "");
+  const bottom = Number.parseFloat(job.min_amount ?? "");
+  if (Number.isFinite(top)) return top;
+  if (Number.isFinite(bottom)) return bottom;
+  return null;
+}
+
 function compareTier(a: string, b: string, sign: number): number {
   const emptyA = a === "";
   const emptyB = b === "";
@@ -101,6 +113,15 @@ function compareLocation(a: Job, b: Job, sign: number): number {
 export function sortJobs(jobs: Job[], key: SortKey, dir: SortDir): Job[] {
   const sign = dir === "asc" ? 1 : -1;
   if (key === "location") return [...jobs].sort((a, b) => compareLocation(a, b, sign));
+  if (key === "salary") {
+    return [...jobs].sort((a, b) => {
+      const va = salaryValue(a);
+      const vb = salaryValue(b);
+      if (va === null || vb === null) return va === vb ? 0 : va === null ? 1 : -1;
+      if (va === vb) return 0;
+      return va < vb ? -sign : sign;
+    });
+  }
   return [...jobs].sort((a, b) => {
     const va = sortValue(a, key);
     const vb = sortValue(b, key);
@@ -109,6 +130,11 @@ export function sortJobs(jobs: Job[], key: SortKey, dir: SortDir): Job[] {
     if (emptyA || emptyB) return emptyA === emptyB ? 0 : emptyA ? 1 : -1;
     if (va < vb) return -sign;
     if (va > vb) return sign;
+    if (key === "seen") {
+      const pa = (a.date_posted ?? "").trim();
+      const pb = (b.date_posted ?? "").trim();
+      if (pa !== pb) return pa < pb ? 1 : -1;
+    }
     return 0;
   });
 }
@@ -153,7 +179,7 @@ function queryWords(query: string): string[] {
 }
 
 function matchesFacets(job: Job, filters: Partial<JobFilters>): boolean {
-  const pairs: [string | undefined, string][] = [
+  const pairs: [string[] | undefined, string][] = [
     [filters.country, job.country],
     [filters.city, job.city],
     [filters.workMode, job.work_mode],
@@ -161,8 +187,8 @@ function matchesFacets(job: Job, filters: Partial<JobFilters>): boolean {
     [filters.employmentType, job.employment_type],
   ];
   return pairs.every(([wanted, value]) => {
-    const text = (wanted ?? "").trim();
-    return text === "" || (value ?? "").trim() === text;
+    const selected = (wanted ?? []).map((item) => item.trim()).filter(Boolean);
+    return selected.length === 0 || selected.includes((value ?? "").trim());
   });
 }
 
@@ -173,7 +199,8 @@ function applyBaseFilters(
   const words = queryWords(filters.query);
   return jobs
     .filter((job) => (!filters.remoteOnly || isRemote(job.is_remote)) && matchesQuery(job, words))
-    .filter((job) => matchesFacets(job, filters));
+    .filter((job) => matchesFacets(job, filters))
+    .filter((job) => !filters.newOnly || isNewInRun(job.first_seen_at, filters.newSince));
 }
 
 export function filterJobs(jobs: Job[], filters: JobFilters): Job[] {
@@ -186,10 +213,11 @@ export function statusCounts(
   jobs: Job[],
   filters: Pick<JobFilters, "query" | "remoteOnly"> & Partial<JobFilters> = { query: "", remoteOnly: false }
 ): StatusCounts {
-  const counts = { all: 0 } as StatusCounts;
+  const counts = { all: 0, new: 0 } as StatusCounts;
   for (const s of STATUSES) counts[s] = 0;
   for (const job of applyBaseFilters(jobs, filters)) {
     counts.all++;
+    if (isNewInRun(job.first_seen_at, filters.newSince)) counts.new++;
     const s = (job.status ?? "") as JobStatus;
     if (s in counts) counts[s]++;
   }

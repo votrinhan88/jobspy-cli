@@ -17,6 +17,7 @@ from jobspy import scrape_jobs
 from jobspy.model import Country
 import pandas as pd
 
+from ats import fetch_company
 from facets import FACET_COLUMNS, add_facets
 from geocoder import Geocoder
 from jobs_schema import schema_columns, validate_jobs_frame
@@ -203,12 +204,13 @@ class JobScraper:
         job: str | list[str],
         location: str | list[str],
         results_wanted: int = 10,
-        site_name: list = ["linkedin", "zip_recruiter", "indeed"],  # "glassdoor" returns 400 (speedyapply/JobSpy#270); "google" returns no data (speedyapply/JobSpy#284)
+        site_name: list = ["linkedin", "zip_recruiter", "indeed"],  # "google" returns no data (speedyapply/JobSpy#284)
         workers: int | None = None,
         overwrite: bool = False,
         title_include: list[str] | None = None,
         title_exclude: list[str] | None = None,
         exclude_companies: list[str] | None = None,
+        companies: list[str] | None = None,
         **kwargs,
     ) -> pd.DataFrame:
         """Scrape job postings from multiple job sites for given job titles and locations.
@@ -285,11 +287,17 @@ class JobScraper:
                 idx, result = future.result()
                 all_jobs[idx] = result
 
-        df = self.merge(all_jobs, country_hint=self._search_country(location))
+        company_frames = self._fetch_company_boards(companies or [], recorder)
+
+        df = self.merge(
+            [frame for frame in all_jobs if frame is not None] + company_frames,
+            country_hint=self._search_country(location),
+        )
         df = self.filter_jobs(df, title_include=title_include, title_exclude=title_exclude, exclude_companies=exclude_companies)
         df = self._add_metadata(df)
         before_count = 0 if overwrite else self._count_canonical_rows(save_path)
-        df = self._upsert(df, save_path, overwrite, now=run_started)
+        stats: dict = {}
+        df = self._upsert(df, save_path, overwrite, now=run_started, stats=stats)
         canonical_total = self._count_canonical_rows_in_frame(df)
         new_jobs = canonical_total if overwrite else max(0, canonical_total - before_count)
         df = self._close_gone_jobs(df, now=_utc_now())
@@ -300,6 +308,7 @@ class JobScraper:
             "started_at": _iso_time(run_started),
             "finished_at": _iso_time(_utc_now()),
             "new_jobs": int(new_jobs),
+            "changed_jobs": int(stats.get("changed", 0)),
             "total_jobs": int(canonical_total),
             "sources": recorder.snapshot(),
         }
@@ -311,6 +320,22 @@ class JobScraper:
             if self.verbose >= 1:
                 print(f"Could not write the scrape report: {exc}")
         return df
+
+    def _fetch_company_boards(self, companies: list[str], recorder: SourceRunRecorder) -> list[pd.DataFrame]:
+        frames = []
+        for entry in companies:
+            label = ":".join(str(entry).split(":")[:2])
+            started = time.monotonic()
+            try:
+                frame = self.clean_job_list(fetch_company(entry))
+            except Exception as exc:
+                recorder.record_attempt(label, 0, (time.monotonic() - started) * 1000, error=str(exc))
+                if self.verbose >= 1:
+                    print(f"[{label}] Failed: {exc}")
+                continue
+            recorder.record_attempt(label, len(frame), (time.monotonic() - started) * 1000)
+            frames.append(frame)
+        return frames
 
     def fill_regions(self, df: pd.DataFrame) -> pd.DataFrame:
         # The region follows the stored location, which upsert never overwrites, so it is filled
@@ -371,6 +396,25 @@ class JobScraper:
     _STALE_DAYS = 14
     _JOB_ID_SEGMENT_MAX = 20
 
+    # Fields a new scrape does not change, so a difference in them is not a content change.
+    _CONTENT_EXCLUDED = {
+        "job_id", "status", "status_updated_at", "location",
+        "region", "country", "city", "work_mode", "seniority", "employment_type",
+        "first_seen_at", "last_seen_at", "closed_at", "closed_reason",
+        "duplicate_of", "role_key",
+    }
+
+    @classmethod
+    def _content_hash(cls, row: dict, columns) -> str:
+        parts = []
+        for column in sorted(columns):
+            if column in cls._CONTENT_EXCLUDED:
+                continue
+            value = row.get(column, "")
+            text = "" if cls._is_empty(value) else str(value)
+            parts.append(f"{column}\x1f{text}")
+        return hashlib.md5("\x1e".join(parts).encode("utf-8")).hexdigest()
+
     @staticmethod
     def _slugify(text: str, max_len: int) -> str:
         text = text.lower().strip()[:max_len]
@@ -412,7 +456,12 @@ class JobScraper:
             df["status_updated_at"] = ""
         return add_facets(df)
 
-    def _add_lifecycle(self, df: pd.DataFrame, now: datetime | None = None) -> pd.DataFrame:
+    def _add_lifecycle(
+        self,
+        df: pd.DataFrame,
+        now: datetime | None = None,
+        fill_missing: bool = True,
+    ) -> pd.DataFrame:
         if df.empty:
             return df
         df = df.copy()
@@ -421,6 +470,8 @@ class JobScraper:
             if col not in df.columns:
                 df[col] = ""
             df[col] = df[col].fillna("").astype(str)
+        if not fill_missing:
+            return df
         missing_first = df["first_seen_at"].str.strip() == ""
         if missing_first.any():
             has_last = df["last_seen_at"].str.strip() != ""
@@ -438,8 +489,11 @@ class JobScraper:
         save_path: str,
         overwrite: bool,
         now: datetime | None = None,
+        stats: dict | None = None,
     ) -> pd.DataFrame:
         now = now or _utc_now()
+        stats = stats if stats is not None else {}
+        stats.setdefault("changed", 0)
         df = self._add_lifecycle(df, now)
         if overwrite or not os.path.exists(save_path):
             return df
@@ -450,7 +504,7 @@ class JobScraper:
         if existing.empty:
             return df
         existing = self._add_metadata(existing)
-        existing = self._add_lifecycle(existing, now)
+        existing = self._add_lifecycle(existing, now, fill_missing=False)
         if df.empty:
             return existing
         before = self._count_canonical_rows_in_frame(existing)
@@ -462,6 +516,7 @@ class JobScraper:
                 all_columns.append(col)
                 for row in existing_rows:
                     row[col] = ""
+        content_columns = list(all_columns)
 
         by_site_id: dict[str, int] = {}
         by_url: dict[str, int] = {}
@@ -481,7 +536,10 @@ class JobScraper:
             if match is None and url_key:
                 match = by_url.get(url_key)
             if match is not None:
+                before_hash = self._content_hash(existing_rows[match], content_columns)
                 self._update_row(existing_rows[match], row)
+                if self._content_hash(existing_rows[match], content_columns) != before_hash:
+                    stats["changed"] += 1
                 self._index_identity(existing_rows[match], match, by_site_id, by_url, by_role, by_fallback)
                 continue
 
@@ -491,7 +549,10 @@ class JobScraper:
             if role_match is not None:
                 canonical = existing_rows[role_match]
                 canonical_id = str(canonical.get("job_id", "") or "").strip()
+                before_hash = self._content_hash(canonical, content_columns)
                 self._update_row(canonical, row)
+                if self._content_hash(canonical, content_columns) != before_hash:
+                    stats["changed"] += 1
                 if not self._has_text(row.get("duplicate_of")):
                     row["duplicate_of"] = canonical_id
                 existing_rows.append(row)
@@ -501,7 +562,10 @@ class JobScraper:
             if not site_id and not url_key:
                 fallback_match = by_fallback.get(self._fallback_key(row))
                 if fallback_match is not None:
+                    before_hash = self._content_hash(existing_rows[fallback_match], content_columns)
                     self._update_row(existing_rows[fallback_match], row)
+                    if self._content_hash(existing_rows[fallback_match], content_columns) != before_hash:
+                        stats["changed"] += 1
                     self._index_identity(
                         existing_rows[fallback_match], fallback_match, by_site_id, by_url, by_role, by_fallback
                     )
@@ -700,8 +764,7 @@ class JobScraper:
             if col in {"duplicate_of", "closed_at", "closed_reason"}:
                 continue
             if col == "first_seen_at":
-                if not self._has_text(target.get(col)) and self._has_text(value):
-                    target[col] = value
+                # Old rows from before the lifecycle columns cannot prove their first sighting.
                 continue
             if col in self._PRESERVE_ON_UPSERT and self._has_text(target.get(col)):
                 continue
@@ -728,7 +791,7 @@ class JobScraper:
         probe = probe or probe_job_url
         stale_days = self._STALE_DAYS if stale_days is None else stale_days
         cutoff = now - timedelta(days=stale_days)
-        df = self._add_lifecycle(df, now)
+        df = self._add_lifecycle(df, now, fill_missing=False)
         closed = 0
         for index, row in df.iterrows():
             if self._has_text(row.get("closed_at")):

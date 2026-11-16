@@ -40,8 +40,12 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+async function openFacet(name: RegExp) {
+  await userEvent.click(screen.getByRole("button", { name }));
+}
+
 describe("Jobs facet filters", () => {
-  it("filters by country", async () => {
+  it("filters by country with a checkbox", async () => {
     jobs = [
       job({ job_id: "1", title: "Data Engineer" }),
       job({
@@ -56,19 +60,74 @@ describe("Jobs facet filters", () => {
     render(<JobsPage />);
 
     expect(await screen.findByText("Data Engineer")).toBeInTheDocument();
-    await userEvent.selectOptions(screen.getByLabelText("Country"), "Vietnam");
+    await openFacet(/^Country:/);
+    await userEvent.click(screen.getByRole("checkbox", { name: "Vietnam" }));
+
     expect(screen.queryByText("Data Engineer")).not.toBeInTheDocument();
     expect(screen.getByText("ML Engineer")).toBeInTheDocument();
   });
 
-  it("shows the display labels in a facet select", async () => {
+  it("narrows the city options to the selected country", async () => {
+    jobs = [
+      job({ job_id: "1", title: "Data Engineer" }),
+      job({
+        job_id: "2",
+        title: "ML Engineer",
+        location: "Hanoi, Vietnam",
+        country: "Vietnam",
+        city: "Hanoi",
+      }),
+    ];
+
+    render(<JobsPage />);
+
+    await screen.findByText("Data Engineer");
+    await openFacet(/^Country:/);
+    await userEvent.click(screen.getByRole("checkbox", { name: "Vietnam" }));
+    await openFacet(/^City:/);
+
+    expect(screen.queryByRole("checkbox", { name: "Sydney" })).not.toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Hanoi" })).toBeInTheDocument();
+  });
+
+  it("clears a city that does not match a new country", async () => {
+    jobs = [
+      job({ job_id: "1", title: "Data Engineer" }),
+      job({
+        job_id: "2",
+        title: "ML Engineer",
+        location: "Hanoi, Vietnam",
+        country: "Vietnam",
+        city: "Hanoi",
+      }),
+    ];
+
+    render(<JobsPage />);
+
+    await screen.findByText("Data Engineer");
+    await openFacet(/^Country:/);
+    await userEvent.click(screen.getByRole("checkbox", { name: "Vietnam" }));
+    await openFacet(/^City:/);
+    await userEvent.click(screen.getByRole("checkbox", { name: "Hanoi" }));
+    await openFacet(/^Country:/);
+    await userEvent.click(screen.getByRole("checkbox", { name: "Vietnam" }));
+    await userEvent.click(screen.getByRole("checkbox", { name: "Australia" }));
+
+    expect(screen.getByText("Data Engineer")).toBeInTheDocument();
+    expect(screen.queryByText("ML Engineer")).not.toBeInTheDocument();
+  });
+
+  it("shows work mode and seniority as checkboxes with display labels", async () => {
     jobs = [job({ work_mode: "onsite", seniority: "junior", employment_type: "part_time" })];
 
     render(<JobsPage />);
 
-    expect(await screen.findByRole("option", { name: "On-site" })).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "Junior" })).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "Part-time" })).toBeInTheDocument();
+    await screen.findByText("Data Engineer");
+    await openFacet(/^Work mode:/);
+    expect(screen.getByRole("checkbox", { name: "On-site" })).toBeInTheDocument();
+
+    await openFacet(/^Seniority:/);
+    expect(screen.getByRole("checkbox", { name: "Junior" })).toBeInTheDocument();
   });
 
   it("clears all facet filters", async () => {
@@ -80,7 +139,8 @@ describe("Jobs facet filters", () => {
     render(<JobsPage />);
 
     await screen.findByText("Data Engineer");
-    await userEvent.selectOptions(screen.getByLabelText("Country"), "Vietnam");
+    await openFacet(/^Country:/);
+    await userEvent.click(screen.getByRole("checkbox", { name: "Vietnam" }));
     expect(screen.queryByText("Data Engineer")).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Clear facets" }));
     expect(screen.getByText("Data Engineer")).toBeInTheDocument();

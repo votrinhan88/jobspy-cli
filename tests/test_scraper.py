@@ -860,6 +860,16 @@ class TestSourceRunReport:
         assert report["new_jobs"] == 1
         assert report["total_jobs"] == 1
 
+    def test_report_counts_changed_rows(self, scraper, mocker, tmp_path):
+        existing = make_df()
+        changed = make_df(title=["AI Engineer II"])
+
+        self._run(scraper, mocker, tmp_path / "jobs.csv", lambda **kwargs: changed, existing=existing)
+
+        report = json.loads((tmp_path / "scrape_run.json").read_text())
+        assert report["changed_jobs"] == 1
+        assert report["new_jobs"] == 0
+
     def test_cooled_source_is_skipped(self, scraper, mocker, tmp_path):
         save_path = tmp_path / "jobs.csv"
         now = datetime.now(timezone.utc)
@@ -885,6 +895,130 @@ class TestSourceRunReport:
         assert report["sources"][0]["site"] == "linkedin"
         assert report["sources"][0]["skipped"] == 1
         assert report["sources"][0]["attempts"] == 0
+
+
+class TestChangedJobCount:
+    def test_an_unchanged_row_is_not_counted(self, scraper, tmp_path):
+        save_path = str(tmp_path / "jobs.csv")
+        make_df().to_csv(save_path, index=False)
+        stats = {}
+
+        scraper._upsert(make_df(), save_path, False, stats=stats)
+
+        assert stats["changed"] == 0
+
+    def test_a_changed_title_is_counted(self, scraper, tmp_path):
+        save_path = str(tmp_path / "jobs.csv")
+        make_df().to_csv(save_path, index=False)
+        stats = {}
+
+        scraper._upsert(make_df(title=["AI Engineer II"]), save_path, False, stats=stats)
+
+        assert stats["changed"] == 1
+
+    def test_a_changed_description_is_counted(self, scraper, tmp_path):
+        save_path = str(tmp_path / "jobs.csv")
+        make_df(description=["Old text"]).to_csv(save_path, index=False)
+        stats = {}
+
+        scraper._upsert(make_df(description=["New text"]), save_path, False, stats=stats)
+
+        assert stats["changed"] == 1
+
+    def test_a_saved_status_is_not_counted(self, scraper, tmp_path):
+        save_path = str(tmp_path / "jobs.csv")
+        existing = make_df()
+        existing["status"] = "applied"
+        existing.to_csv(save_path, index=False)
+        stats = {}
+
+        scraper._upsert(make_df(), save_path, False, stats=stats)
+
+        assert stats["changed"] == 0
+
+    def test_a_location_change_is_not_counted(self, scraper, tmp_path):
+        save_path = str(tmp_path / "jobs.csv")
+        make_df(location=["Sydney, Australia (geocoded)"]).to_csv(save_path, index=False)
+        stats = {}
+
+        scraper._upsert(make_df(location=["Sydney NSW"]), save_path, False, stats=stats)
+
+        assert stats["changed"] == 0
+
+    def test_a_new_row_is_not_counted(self, scraper, tmp_path):
+        save_path = str(tmp_path / "jobs.csv")
+        make_df().to_csv(save_path, index=False)
+        stats = {}
+
+        scraper._upsert(
+            make_df(title=["ML Engineer"], job_url=["https://example.com/job/2"]),
+            save_path,
+            False,
+            stats=stats,
+        )
+
+        assert stats["changed"] == 0
+
+
+class TestCompanyBoards:
+    def _company_frame(self):
+        return pd.DataFrame([{
+            "title": "ML Engineer",
+            "company": "Acme Corporation",
+            "location": "Sydney, Australia",
+            "date_posted": "2026-09-01",
+            "job_url": "https://boards.greenhouse.io/acme/jobs/123",
+            "site": "greenhouse",
+            "id": "123",
+            "description": "Build models.",
+        }])
+
+    def test_run_adds_rows_from_a_company_board(self, scraper, mocker, tmp_path):
+        mocker.patch("scraper.scrape_jobs", return_value=make_df())
+        mocker.patch("scraper.fetch_company", return_value=self._company_frame())
+        mocker.patch.object(scraper, "get_location_map", return_value={
+            "Sydney, Australia": "Sydney, Australia",
+        })
+        mocker.patch.object(scraper, "fill_regions", side_effect=lambda df: df)
+
+        scraper(
+            save_path=str(tmp_path / "jobs.csv"),
+            job="AI Engineer",
+            location="Australia",
+            site_name=["linkedin"],
+            companies=["greenhouse:acme:Acme Corporation"],
+        )
+
+        df = pd.read_csv(tmp_path / "jobs.csv", keep_default_na=False)
+        assert "greenhouse" in set(df["site"])
+        assert "Acme Corporation" in set(df["company"])
+        report = json.loads((tmp_path / "scrape_run.json").read_text())
+        entry = next(run for run in report["sources"] if run["site"] == "greenhouse:acme")
+        assert entry["succeeded"] == 1
+        assert entry["jobs"] == 1
+
+    def test_a_failed_company_board_does_not_stop_the_run(self, scraper, mocker, tmp_path):
+        mocker.patch("scraper.scrape_jobs", return_value=make_df())
+        mocker.patch("scraper.fetch_company", side_effect=RuntimeError("board not found"))
+        mocker.patch.object(scraper, "get_location_map", return_value={
+            "Sydney, Australia": "Sydney, Australia",
+        })
+        mocker.patch.object(scraper, "fill_regions", side_effect=lambda df: df)
+
+        scraper(
+            save_path=str(tmp_path / "jobs.csv"),
+            job="AI Engineer",
+            location="Australia",
+            site_name=["linkedin"],
+            companies=["greenhouse:ghost:Acme"],
+        )
+
+        df = pd.read_csv(tmp_path / "jobs.csv", keep_default_na=False)
+        assert len(df) == 1
+        report = json.loads((tmp_path / "scrape_run.json").read_text())
+        entry = next(run for run in report["sources"] if run["site"] == "greenhouse:ghost")
+        assert entry["failed"] == 1
+        assert "board not found" in entry["error"]
 
 
 class TestSourceHealth:
@@ -1246,6 +1380,36 @@ class TestLifecycle:
 
         old_row = result[result["job_url"] == "https://example.com/job/1"].iloc[0]
         assert old_row["closed_at"] == ""
+
+    def test_matched_legacy_row_gets_last_seen_but_not_first_seen(self, scraper, tmp_path):
+        save_path = str(tmp_path / "jobs.csv")
+        make_df().to_csv(save_path, index=False)
+
+        result = scraper._upsert(make_df(max_amount=[200000]), save_path, overwrite=False, now=self.NOW)
+
+        assert result["first_seen_at"].iloc[0] == ""
+        assert result["last_seen_at"].iloc[0] == "2026-09-15T12:00:00Z"
+
+    def test_unseen_legacy_row_keeps_empty_lifecycle(self, scraper, tmp_path):
+        save_path = str(tmp_path / "jobs.csv")
+        make_df().to_csv(save_path, index=False)
+
+        result = scraper._upsert(make_df2(), save_path, overwrite=False, now=self.NOW)
+
+        old_row = result[result["job_url"] == "https://example.com/job/1"].iloc[0]
+        assert old_row["first_seen_at"] == ""
+        assert old_row["last_seen_at"] == ""
+
+    def test_close_gone_jobs_does_not_stamp_a_legacy_row(self, scraper):
+        calls = []
+
+        result = scraper._close_gone_jobs(
+            make_df(), now=self.NOW, probe=lambda url: calls.append(url) or 404
+        )
+
+        assert calls == []
+        assert result["first_seen_at"].iloc[0] == ""
+        assert result["last_seen_at"].iloc[0] == ""
 
     def test_a_scrape_closes_a_gone_job(self, scraper, mocker, tmp_path):
         save_path = tmp_path / "jobs.csv"

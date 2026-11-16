@@ -116,3 +116,122 @@ For full UI conventions and page specs, see `.agents/SPEC.md`.
 - **Config is repaired on read, rejected on write** - one bad field must not break the Scrape page, so `readConfig` uses defaults for bad fields. A save must not write a bad file, so `writeConfig` throws and the API returns 400. Reason: read is recovery, write is a contract.
 - **Supported sites** - `google` and `glassdoor` are filtered from a saved site list. If no site remains, the defaults apply. Reason: both boards return no usable data, and an empty list would spawn a scrape that cannot succeed.
 - **CI with no new service** - GitHub Actions runs the existing local commands. gitleaks runs on the full history. Dependabot watches `uv`, npm and GitHub Actions. No dashboard, no hosted database.
+
+## 2026-11-04 - Facet Checkboxes and the Archived Page
+
+- **Checkboxes, not native selects** - each facet opens a small menu of checkboxes. Several values in one facet mean OR, and different facets mean AND. Reason: a native multi-select is hard to use, and one value per facet could not express "Australia or Vietnam" or "Remote or Hybrid".
+- **Adaptive controls** - a facet with five options or fewer is plain checkboxes. A facet with more than five also gets All and Clear. Reason: short lists do not need extra buttons, and long lists need a fast path.
+- **One-way city options** - the city menu uses the selected countries as context, and a country change removes a city that no longer matches. The country menu ignores the selected cities. Reason: a two-way dependency let a city filter hide the country the user wanted to add. The old menu also offered a Hanoi city while a Sydney-only country filter was active.
+- **Skipped is an archive, not a delete** - the Skip button sets `status` to `skipped`. The row stays in `jobs.csv`, leaves the Jobs and Applications lists, and appears on the new Archived page. Restore sets the status back to New. Reason: the user needs a way to hide irrelevant jobs without losing the row or breaking identity.
+- **Rejected stays in Applications** - the Applications archive section is now "Rejected" and shows only rejected rows. Reason: Skip is a triage action, and Reject is an application outcome. They need separate places.
+- **No separate archive file** - Archived reads the same `jobs.csv` and filters `status`. Reason: flat files stay the storage contract, and a second file would need a merge path.
+
+## 2026-11-04 - New Means the Latest Run
+
+- **New is a run marker, not a status** - the old `New` label was the empty status. That made 248 untriaged jobs look new. `status = ""` is now `Untriaged`. `New` means `first_seen_at` is at or after `started_at` of the latest scrape run.
+- **First seen, not last seen** - a job is New only when it first appeared in the latest run. A job that was found again is not New. Reason: "new" normally means first appearance. A marker for every returned row would put almost every job in the New set after each run.
+- **One source for the run start** - the Jobs page reads `GET /api/scrape/status` and uses `started_at`. Reason: the existing endpoint is already the app's record of the latest run. A new endpoint would add no data.
+- **Legacy rows stay empty** - a row from before the lifecycle columns keeps `first_seen_at` empty. A matched legacy row gets `last_seen_at` only. The engine does not invent a first sighting, because that would mark old rows as New.
+- **No timestamp fill on upsert** - the existing-row path adds the lifecycle columns but does not fill them. `_close_gone_jobs` does the same. Reason: a run must not make an unseen old row look seen. This also makes Last seen truthful after the migration.
+- **New badge under the status chip** - the status chip shows Untriaged. A separate New badge in the same cell, under the chip, shows that the row first appeared in the latest run. The New filter chip uses the same rule.
+
+## 2026-11-04 - One City Label per Metro Area
+
+- **The city facet is a filter, so one value per metro** - six Sydney suburbs and two state names sat beside Sydney in the city menu. The filter was hard to use. `_canonical_city` in `facets.py` now maps the known names to one label.
+- **A state is not a city** - "NSW, Australia" and "SA, Australia" now give an empty city. The country and the region stay. The rule is limited to Australia, because "Victoria, Canada" is a real city.
+- **Metro and suburb names roll up** - "Greater Brisbane" becomes "Brisbane". "North Sydney", "Chatswood", "Parramatta", "Bella Vista" and "Belrose" become "Sydney". "Melbourne Eastern Suburbs" becomes "Melbourne".
+- **Vietnamese labels lose the rank prefix** - "Thành phố Hồ Chí Minh" becomes "Hồ Chí Minh", and the same holds for Hà Nội, Đà Nẵng and Hải Phòng. The English names "Ho Chi Minh City" and "Hanoi" map to the same labels. One label per city keeps the menu short and the two spellings in one place.
+- **A fixed table, not a gazetteer** - `_CITY_ALIASES` holds about ten names, plus the Australian region set and the prefix rule. An unknown name passes through unchanged. No model, no network call, no new file.
+- **Old rows need the backfill** - a new scrape fills the facets of the rows it returns. Rows it does not return keep their old city until `scripts/backfill_facets.py --save_path <jobs.csv>` runs.
+
+## 2026-11-04 - A Quiet Status Cell
+
+- **No chip for an untriaged row** - 223 of 258 rows were untriaged, so the Jobs table showed a wall of identical boxes. The table cell now renders a chip only for a real status. The untriaged row keeps the word in an `sr-only` span, so screen readers still hear the state. The drawer still shows the chip, because there the status has context.
+- **NEW in uppercase** - the badge label is `NEW`, to match the uppercase status chips. The word stays "New" in prose and in the code that decides the marker.
+- **No data change** - the stored `status` is still the empty string. Only the presentation changes.
+
+## 2026-11-04 - Remove the Empty Updated Count
+
+- **`updated_jobs` removed** - the field was always null, so the done banner said "0 updated" after a run that matched 132 rows. Removed from the status shape, the types, the runner, the banner and the SPEC.
+- **Add it back only with a definition** - if a feed goes quiet, add a "changed" count (title, description or salary moved), not a match count. A match count is near-constant and names the wrong thing.
+
+## 2026-11-05 - A Content Change Count
+
+- **`changed_jobs`** - the engine hashes the content columns before and after the merge of each matched row. The hash leaves out the preserved columns (`status`, `status_updated_at`, `location`, `job_id`), the lifecycle columns, the geocoded location, the derived facets and `role_key`. A difference counts once.
+- **No `content_hash` column** - the hash is computed on both sides at run time, so the CSV schema does not grow. At this scale the cost is negligible.
+- **Identity stays `job_id`** - `(site, id)` is already stored as the per-board key. Switching identity to it would change `job_id` for existing rows, which breaks application tracking. The immutable identity rule wins.
+- **Not in the banner** - the count is a diagnostic in `scrape_run.json`. The done banner still shows only new and total.
+
+## 2026-11-05 - A Local Model Provider
+
+- **Two request shapes** - Claude uses the Messages API; a local endpoint uses the OpenAI-compatible `chat/completions` shape. `LLM_BASE_URL` selects the local provider, `LLM_MODEL` names the model and `LLM_API_KEY` is optional. A trailing slash on the base URL is dropped.
+- **Local wins over Claude** - when both are configured, the local endpoint runs. It is the cheaper and more private path, and the person who set it asked for it.
+- **No response_format** - the request does not require JSON mode, because older llama.cpp builds reject it. The prompt already asks for one JSON object and `parseAnalysis` reads the object from around any prose.
+- **The empty-key guard** - the error path hides a message that contains the key, but only when a key is set. An empty string would otherwise match every message.
+
+## 2026-11-05 - Posting Evidence, Not a Verdict
+
+- **Two observations** - the drawer shows how many days ago the row was first seen, and a note when the board date is more than one day later than that sighting. The second is the observable part of a repost.
+- **No ghost score** - the app does not guess whether a job is real. It shows what it saw and leaves the judgment to the reader. A threshold badge would be a verdict.
+- **One-day tolerance** - a time zone can move a board date by a day, so a difference of one day or less does not count as a repost.
+
+## 2026-11-05 - Glassdoor Re-enabled
+
+- **The probe** - python-jobspy 1.4.1 returned 5 results each for Sydney, New York and London on 2026-11-05. The HTTP 400 from issue #270 no longer reproduces.
+- **Selectable, not default** - the Scrape page checkbox is enabled and a saved config keeps `glassdoor`. The default site list stays LinkedIn and Indeed, because Glassdoor sits behind Cloudflare and can fail.
+- **Google stays blocked** - it still needs a browser (issue #284).
+
+## 2026-11-05 - A Read-Only Agent Surface
+
+- **One tool, one file** - `mcp_server.py` speaks newline-delimited JSON-RPC over stdio and exposes only `search_jobs`. No MCP SDK and no new dependency; the protocol surface is small enough to test directly.
+- **Shared query logic** - the MCP tool and `jobs_query.py` call the same `query_jobs`, so a filter cannot drift between the CLI and the agent.
+- **Skipped rows hidden by default** - this matches the Jobs page. A status filter still reaches the archive.
+- **Read-only** - neither entry point writes the CSV. Mutations stay in the web app, where the status log and undo live.
+
+## 2026-11-05 - Direct Company Boards
+
+- **`provider:board:company` in one flag** - `--company greenhouse:acme:Acme Corporation` needs no new config file or schema. The name is optional and defaults from the slug. A web form field can come later; the engine contract stays the same.
+- **Fetch once, not per search** - a board returns all of its jobs, so a run fetches each board once. This can add roles outside the search terms, which is the point of following a company.
+- **`first_published`, then `updated_at`** - Greenhouse gives both. The board date is the first publication when it exists; the update time is a fallback and is not a repost signal.
+- **Provider allowlist and board pattern** - only `greenhouse` is accepted, and the board name must match `[a-zA-Z0-9_-]+`, so a config value cannot build another URL.
+- **The web config carries the same entries** - `scrape_config.json` stores the `--company` strings as they are. The engine owns the syntax, the web layer only validates it and drops a bad entry with a message. No second schema, so the CLI, the API and the form cannot drift.
+
+## 2026-11-05 - Sortable Last Seen and Salary
+
+- **Sorting is a display order, not a comparison of value** - Salary sorts on the raw top of the range. Converting currencies would need live rates, and the order would change with the rate. The order compares the amount the board gave, nothing more.
+- **Rows without a date or amount stay last in both directions** - an empty salary is not "0", and an unseen row is not "oldest". The same rule as an empty posted date.
+- **The label stays "Last seen"** - it is the last scrape that returned the row, and the Stale and Closed badges are derived from the same timestamp. "Status" would collide with the pipeline Status column. "Last seen" says what the reader gets: a sighting date, not a verdict or a user status.
+
+## 2026-11-05 - Second ATS Adapter: Lever
+
+- **Lever before Ashby and Workday** - the Lever board API is keyless, returns a small JSON array, and carries a salary range. That tests the adapter contract with a different payload shape without new auth.
+- **Salary range maps to the existing columns** - `salaryRange.min` and `max` become `min_amount` and `max_amount`, and the interval maps to `yearly`, `monthly` or `hourly`. No new column and no change to the Jobs table.
+- **`descriptionPlain` wins over HTML** - Lever often publishes both. Plain text needs no stripping and keeps sentences readable; the HTML path is a fallback.
+- **A lever board keeps the same entry syntax** - `lever:board[:Company Name]`. The web validation accepts both providers, so the form and the CLI stay one contract.
+
+## 2026-11-05 - Third ATS Adapter: Ashby
+
+- **Ashby after Lever** - the board API is public and keyless, and the payload carries a published salary tier. A third shape proves the adapter seam is not shaped around the first two boards.
+- **The first Salary component wins** - a tier can hold equity, bonus and salary components. Only a component with `compensationType: "Salary"` fills the amount columns; equity percentages have no amount and are ignored.
+- **Unlisted jobs are skipped** - `isListed: false` means the employer hides the posting from the board. The scraper follows the board, not the internal record.
+- **The interval comes from the token, not an exact string** - Ashby writes `1 YEAR`, `1 HOUR` and similar. A token match keeps the mapping stable if the number or spacing changes.
+
+## 2026-11-05 - Fourth ATS Adapter: Workday
+
+- **Workday needs more than a slug** - the board identity is a tenant, a host cluster and a site, so the board part is `tenant.cluster/site`. One flag keeps the CLI contract and the web field.
+- **List pages, then one detail call per job** - the list reply has no description and no real date. `startDate` comes from the detail call, which is the only source.
+- **A cap of 100 postings per board** - a large Workday board can hold thousands, and each row costs a request. The cap keeps one board from blocking a run.
+- **No salary** - the Workday reply carries none, so the amount columns stay empty instead of guessing from the description.
+
+## 2026-11-05 - Scrape Source Ticks
+
+- **ATS providers are a tick list, not extra sites** - a company board is not a job site, so `providers` gates the `companies` entries instead of merging into `site_name`. A board stays saved while its provider is off.
+- **Every provider starts ticked** - the default matches the old behavior, where every saved board ran.
+- **Glassdoor starts ticked** - it works again, so the default list carries LinkedIn, Indeed and Glassdoor.
+- **Google Jobs stays last and reads "unavailable"** - the upstream cause is a browser requirement, not a block that a retry can lift. The label states the fact; the row stays disabled with no badge.
+
+## 2026-11-05 - Last Seen Tie-Break
+
+- **Ties break on the posted date, newest first** - one scrape stamps many rows with the same `last_seen_at`, so sorting on the timestamp alone leaves a large block unchanged. The posted date gives each row a second, visible key.
+- **The tie-break does not follow the sort direction** - the reader clicked Last seen, not Posted. Newest posting first inside each timestamp block is the useful order in both directions.
+- **Rows with no sighting stay last** - unknown is not older or newer, so it cannot join the order.

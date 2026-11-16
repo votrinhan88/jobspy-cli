@@ -101,7 +101,7 @@ describe("FitReport analysis", () => {
   it("asks for a confirmation with the size before it calls the API, and Cancel sends nothing", async () => {
     render(<FitReport jobId="job-1" tag="backend" />);
     await userEvent.click(await screen.findByRole("button", { name: "Analyse fit" }));
-    expect(screen.getByText(/send resume and job text to claude/i)).toHaveTextContent("4321");
+    expect(screen.getByText(/send resume and job text to the model/i)).toHaveTextContent("4321");
     await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(screen.queryByText(/send resume and job text/i)).not.toBeInTheDocument();
     expect(calls("POST /api/jobs/job-1/analysis")).toHaveLength(0);

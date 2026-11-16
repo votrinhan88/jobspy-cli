@@ -7,6 +7,7 @@ import { isValidTag } from "@/lib/tag";
 import {
   analysisAvailable,
   buildMessages,
+  localModelConfig,
   resolveModel,
   runAnalysis,
 } from "@/lib/analysis";
@@ -91,10 +92,11 @@ export async function POST(request: NextRequest, { params }: Context) {
     return Response.json({ error: "This job has no description." }, { status: 422 });
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
-  if (!apiKey) {
+  const local = localModelConfig();
+  const apiKey = process.env.ANTHROPIC_API_KEY?.trim() ?? "";
+  if (!local && !apiKey) {
     return Response.json(
-      { error: "Set ANTHROPIC_API_KEY to use gap analysis." },
+      { error: "Set ANTHROPIC_API_KEY or LLM_BASE_URL to use gap analysis." },
       { status: 503 }
     );
   }
@@ -103,8 +105,9 @@ export async function POST(request: NextRequest, { params }: Context) {
   const result = await runAnalysis({
     job: { title: job.title, company: job.company, description },
     resumeText: resume.text,
-    apiKey,
+    apiKey: local ? local.apiKey : apiKey,
     model,
+    baseUrl: local?.baseUrl,
   });
   if (!result.ok) {
     return Response.json({ error: result.error }, { status: 502 });

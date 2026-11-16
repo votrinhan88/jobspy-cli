@@ -2,9 +2,16 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Job, JobStatus } from "@/lib/csv";
-import { STATUSES, isRemote, statusLabel } from "@/lib/status";
-import { FACET_FILTERS, facetOptions, facetValueLabel, type FacetKey } from "@/lib/facets";
-import { formatLastSeen, isClosed, isStale } from "@/lib/lifecycle";
+import { STATUSES, isRemote, isSkippedStatus, statusLabel } from "@/lib/status";
+import {
+  FACET_FILTERS,
+  facetOptions,
+  facetValueLabel,
+  type FacetKey,
+  type FacetSelections,
+} from "@/lib/facets";
+import { formatLastSeen, isClosed, isNewInRun, isStale } from "@/lib/lifecycle";
+import { firstSeenDays, isReposted } from "@/lib/posting-signals";
 import {
   DEFAULT_SORT,
   filterJobs,
@@ -19,6 +26,7 @@ import { StatusMenu } from "@/components/status-menu";
 import { useChangeStatus } from "@/components/use-change-status";
 import { ResumeFit } from "@/app/jobs/_components/resume-fit";
 import { LocationGroupRow } from "@/app/jobs/_components/location-group-row";
+import { FacetFilter } from "@/app/jobs/_components/facet-filter";
 
 function formatSalary(job: Job): string | null {
   const min = job.min_amount ? parseFloat(job.min_amount) : null;
@@ -39,7 +47,17 @@ const COLUMNS: { key: SortKey; label: string }[] = [
   { key: "status", label: "Status" },
 ];
 
-const TABLE_COLUMNS = COLUMNS.length + 3;
+const EXTRA_COLUMNS: { key: SortKey; label: string }[] = [
+  { key: "seen", label: "Last seen" },
+  { key: "salary", label: "Salary" },
+];
+const SORT_COLUMNS = [...COLUMNS, ...EXTRA_COLUMNS];
+const TABLE_COLUMNS = SORT_COLUMNS.length + 1;
+const JOB_STATUSES = STATUSES.filter((status) => !isSkippedStatus(status));
+
+function emptyFacets(): FacetSelections {
+  return { country: [], city: [], work_mode: [], seniority: [], employment_type: [] };
+}
 
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -99,6 +117,8 @@ function JobDrawer({
   const salary = formatSalary(job);
   const remote = isRemote(job.is_remote);
   const extra = job as Record<string, string>;
+  const ageDays = firstSeenDays(job.first_seen_at);
+  const reposted = isReposted(job.first_seen_at, job.date_posted);
 
   useEffect(() => {
     closeRef.current?.focus();
@@ -180,6 +200,23 @@ function JobDrawer({
             <span className="drawer-label">Posted</span>
             <span className="mono">{job.date_posted || "—"}</span>
           </div>
+
+          <div className="drawer-field">
+            <span className="drawer-label">First seen</span>
+            <span className="mono">{formatLastSeen(job.first_seen_at)}</span>
+            {ageDays !== null && (
+              <span className="muted">
+                {ageDays === 1 ? "1 day ago" : `${ageDays} days ago`}
+              </span>
+            )}
+          </div>
+
+          {reposted && (
+            <div className="drawer-field">
+              <span className="drawer-label">Board date</span>
+              <span>Later than the first sighting</span>
+            </div>
+          )}
 
           <div className="drawer-field">
             <span className="drawer-label">Last seen</span>
@@ -271,6 +308,29 @@ function SortIcon({ dir }: { dir: SortDir | null }) {
   );
 }
 
+function SortHeader({
+  label,
+  sortKey,
+  active,
+  dir,
+  onToggle,
+}: {
+  label: string;
+  sortKey: SortKey;
+  active: boolean;
+  dir: SortDir | null;
+  onToggle: (key: SortKey) => void;
+}) {
+  return (
+    <th aria-sort={active ? (dir === "asc" ? "ascending" : "descending") : "none"}>
+      <button type="button" className="sort-btn" onClick={() => onToggle(sortKey)}>
+        {label}
+        <SortIcon dir={active ? dir : null} />
+      </button>
+    </th>
+  );
+}
+
 export default function JobsPage() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
@@ -278,14 +338,10 @@ export default function JobsPage() {
   const [noProfile, setNoProfile] = useState(false);
   const [query, setQuery] = useState("");
   const [statuses, setStatuses] = useState<Set<JobStatus>>(new Set());
+  const [newOnly, setNewOnly] = useState(false);
+  const [runStartedAt, setRunStartedAt] = useState<string | null>(null);
   const [remoteOnly, setRemoteOnly] = useState(false);
-  const [facets, setFacets] = useState<Record<FacetKey, string>>({
-    country: "",
-    city: "",
-    work_mode: "",
-    seniority: "",
-    employment_type: "",
-  });
+  const [facets, setFacets] = useState<FacetSelections>(emptyFacets);
   const [groupLocations, setGroupLocations] = useState(false);
   const [sort, setSort] = useState(DEFAULT_SORT);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -312,10 +368,31 @@ export default function JobsPage() {
     load();
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    async function loadRun() {
+      try {
+        const res = await fetch("/api/scrape/status");
+        if (!res.ok) return;
+        const status = await res.json();
+        if (!cancelled) setRunStartedAt(status.started_at ?? null);
+      } catch {
+        if (!cancelled) setRunStartedAt(null);
+      }
+    }
+    loadRun();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const listJobs = useMemo(() => jobs.filter((job) => !isSkippedStatus(job.status)), [jobs]);
   const filters = useMemo(
     () => ({
       query,
       statuses,
+      newOnly,
+      newSince: runStartedAt,
       remoteOnly,
       country: facets.country,
       city: facets.city,
@@ -323,18 +400,23 @@ export default function JobsPage() {
       seniority: facets.seniority,
       employmentType: facets.employment_type,
     }),
-    [query, statuses, remoteOnly, facets]
+    [query, statuses, newOnly, runStartedAt, remoteOnly, facets]
   );
   const facetChoices = useMemo(() => {
     const choices = {} as Record<FacetKey, string[]>;
-    for (const { key } of FACET_FILTERS) choices[key] = facetOptions(jobs, key);
+    for (const { key } of FACET_FILTERS) {
+      choices[key] = facetOptions(listJobs, key, key === "city" ? { country: facets.country } : {});
+    }
     return choices;
-  }, [jobs]);
-  const hasFacetFilters = useMemo(() => Object.values(facets).some(Boolean), [facets]);
-  const counts = useMemo(() => statusCounts(jobs, filters), [jobs, filters]);
+  }, [listJobs, facets]);
+  const hasFacetFilters = useMemo(
+    () => Object.values(facets).some((values) => values.length > 0),
+    [facets]
+  );
+  const counts = useMemo(() => statusCounts(listJobs, filters), [listJobs, filters]);
   const visible = useMemo(
-    () => sortJobs(filterJobs(jobs, filters), sort.key, sort.dir),
-    [jobs, filters, sort]
+    () => sortJobs(filterJobs(listJobs, filters), sort.key, sort.dir),
+    [listJobs, filters, sort]
   );
   const locationGroups = useMemo(
     () => (groupLocations ? groupByLocation(visible) : null),
@@ -357,7 +439,7 @@ export default function JobsPage() {
     setSort((prev) =>
       prev.key === key
         ? { key, dir: prev.dir === "asc" ? "desc" : "asc" }
-        : { key, dir: key === "posted" ? "desc" : "asc" }
+        : { key, dir: key === "posted" || key === "seen" || key === "salary" ? "desc" : "asc" }
     );
   }
 
@@ -365,6 +447,7 @@ export default function JobsPage() {
     const salary = formatSalary(job);
     const closed = isClosed(job.closed_at);
     const stale = !closed && isStale(job.last_seen_at);
+    const newInRun = isNewInRun(job.first_seen_at, runStartedAt);
     return (
       <tr
         key={job.job_id}
@@ -382,6 +465,14 @@ export default function JobsPage() {
         <td className="job-company-cell" data-label="Company">{job.company || "—"}</td>
         <td className="muted" data-label="Location">{formatLocation(job) || "—"}</td>
         <td className="muted mono" data-label="Posted">{job.date_posted || "—"}</td>
+        <td data-label="Status">
+          {job.status ? (
+            <StatusChip status={job.status} />
+          ) : (
+            <span className="sr-only">{statusLabel("")}</span>
+          )}
+          {newInRun && <span className="lifecycle-badge lifecycle-badge--new">NEW</span>}
+        </td>
         <td className="muted mono" data-label="Last seen">
           <span>{formatLastSeen(job.last_seen_at)}</span>
           {closed ? (
@@ -390,8 +481,7 @@ export default function JobsPage() {
             <span className="lifecycle-badge lifecycle-badge--stale">Stale</span>
           ) : null}
         </td>
-        <td data-label="Status"><StatusChip status={job.status} /></td>
-        <td className="cell-mobile-only salary-display" data-label="Salary">{salary || "—"}</td>
+        <td className="salary-display" data-label="Salary">{salary || "—"}</td>
         <td className="action-cell">
           <div className="row-actions row-actions--end">
             <TriageButtons job={job} busy={pending.has(job.job_id)} onChange={changeStatus} />
@@ -410,12 +500,17 @@ export default function JobsPage() {
     });
   }
 
-  function setFacet(key: FacetKey, value: string) {
-    setFacets((prev) => ({ ...prev, [key]: value }));
+  function setFacet(key: FacetKey, values: string[]) {
+    setFacets((prev) => {
+      const next = { ...prev, [key]: values };
+      if (key !== "country") return next;
+      const available = facetOptions(listJobs, "city", { country: next.country });
+      return { ...next, city: next.city.filter((value) => available.includes(value)) };
+    });
   }
 
   function clearFacets() {
-    setFacets({ country: "", city: "", work_mode: "", seniority: "", employment_type: "" });
+    setFacets(emptyFacets());
   }
 
   if (noProfile) {
@@ -452,20 +547,32 @@ export default function JobsPage() {
         </div>
       </header>
 
-      {!loading && jobs.length > 0 && (
+      {!loading && listJobs.length > 0 && (
         <div className="filter-bar">
           <div className="filter-chips" role="group" aria-label="Filter by status">
             <button
               type="button"
               className="filter-chip"
-              aria-pressed={statuses.size === 0}
-              onClick={() => setStatuses(new Set())}
+              aria-pressed={statuses.size === 0 && !newOnly}
+              onClick={() => {
+                setStatuses(new Set());
+                setNewOnly(false);
+              }}
             >
               All <span className="filter-chip-count">{counts.all}</span>
             </button>
-            {STATUSES.map((s) => (
+            <button
+              type="button"
+              className="filter-chip"
+              aria-label="New jobs"
+              aria-pressed={newOnly}
+              onClick={() => setNewOnly((value) => !value)}
+            >
+              New <span className="filter-chip-count">{counts.new}</span>
+            </button>
+            {JOB_STATUSES.map((s) => (
               <button
-                key={s || "new"}
+                key={s || "untriaged"}
                 type="button"
                 className="filter-chip"
                 aria-pressed={statuses.has(s)}
@@ -494,31 +601,23 @@ export default function JobsPage() {
               Group by location
             </button>
             <span className="count-badge" aria-live="polite">
-              {visible.length} of {jobs.length} jobs
+              {visible.length} of {listJobs.length} jobs
             </span>
           </div>
         </div>
       )}
 
-      {!loading && jobs.length > 0 && (
+      {!loading && listJobs.length > 0 && (
         <div className="facet-bar" role="group" aria-label="Filter by facets">
           {FACET_FILTERS.map(({ key, label }) => (
-            <label key={key} className="facet-field">
-              <span className="facet-label">{label}</span>
-              <select
-                className="input input--sm facet-select"
-                aria-label={label}
-                value={facets[key]}
-                onChange={(e) => setFacet(key, e.target.value)}
-              >
-                <option value="">All</option>
-                {facetChoices[key].map((value) => (
-                  <option key={value} value={value}>
-                    {facetValueLabel(key, value)}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <FacetFilter
+              key={key}
+              label={label}
+              options={facetChoices[key]}
+              selected={facets[key]}
+              valueLabel={(value) => facetValueLabel(key, value)}
+              onChange={(values) => setFacet(key, values)}
+            />
           ))}
           <button
             type="button"
@@ -539,29 +638,25 @@ export default function JobsPage() {
         <p className="empty-state">
           {jobs.length === 0
             ? "No jobs yet. Run a scrape to populate this list."
-            : "No jobs match these filters."}
+            : listJobs.length === 0
+              ? "No active jobs. Skipped jobs are in Archived."
+              : "No jobs match these filters."}
         </p>
       ) : (
         <div className="table-wrap table-wrap--cards">
           <table className="jobs-table jobs-table--cards">
             <thead>
               <tr>
-                {COLUMNS.map(({ key, label }) => {
-                  const active = sort.key === key;
-                  return (
-                    <th
-                      key={key}
-                      aria-sort={active ? (sort.dir === "asc" ? "ascending" : "descending") : "none"}
-                    >
-                      <button type="button" className="sort-btn" onClick={() => toggleSort(key)}>
-                        {label}
-                        <SortIcon dir={active ? sort.dir : null} />
-                      </button>
-                    </th>
-                  );
-                })}
-                <th>Last seen</th>
-                <th className="cell-mobile-only">Salary</th>
+                {SORT_COLUMNS.map(({ key, label }) => (
+                  <SortHeader
+                    key={key}
+                    sortKey={key}
+                    label={label}
+                    active={sort.key === key}
+                    dir={sort.dir}
+                    onToggle={toggleSort}
+                  />
+                ))}
                 <th><span className="sr-only">Actions</span></th>
               </tr>
             </thead>

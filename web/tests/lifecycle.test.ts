@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { STALE_DAYS, formatLastSeen, isClosed, isStale } from "@/lib/lifecycle";
+import { STALE_DAYS, formatLastSeen, isClosed, isNewInRun, isStale } from "@/lib/lifecycle";
 
 const now = Date.parse("2026-09-15T12:00:00Z");
 const daysAgo = (days: number) => new Date(now - days * 86_400_000).toISOString();
@@ -41,5 +41,24 @@ describe("formatLastSeen", () => {
   it("shows a dash when there is no timestamp", () => {
     expect(formatLastSeen("")).toBe("—");
     expect(formatLastSeen("   ")).toBe("—");
+  });
+});
+
+describe("isNewInRun", () => {
+  const run = "2026-09-15T12:00:00Z";
+
+  it("is true when the job first appeared in the latest run", () => {
+    expect(isNewInRun(run, run)).toBe(true);
+    expect(isNewInRun("2026-09-15T12:00:01Z", run)).toBe(true);
+  });
+
+  it("is false when the job first appeared before the latest run", () => {
+    expect(isNewInRun("2026-09-14T12:00:00Z", run)).toBe(false);
+  });
+
+  it("is false without a first-seen time or a run time", () => {
+    expect(isNewInRun("", run)).toBe(false);
+    expect(isNewInRun(run, null)).toBe(false);
+    expect(isNewInRun("not a date", run)).toBe(false);
   });
 });

@@ -9,6 +9,8 @@ export interface ScrapeConfig {
   workers: number;
   title_exclude: string[];
   exclude_companies: string[];
+  companies: string[];
+  providers: string[];
   schedule: string | null;
   fetch_linkedin_description: boolean;
 }
@@ -18,17 +20,25 @@ export interface ConfigValidation {
   errors: string[];
 }
 
-// Google serves job results only to browsers that run JavaScript. Glassdoor returns HTTP 400.
-const UNSUPPORTED_SITES = new Set(["google", "glassdoor"]);
+// Google serves job results only to browsers that run JavaScript.
+const UNSUPPORTED_SITES = new Set(["google"]);
+const COMPANY_PROVIDERS = ["greenhouse", "lever", "ashby", "workday"];
+const SIMPLE_COMPANY_PROVIDERS = COMPANY_PROVIDERS.filter((provider) => provider !== "workday");
+const COMPANY_ENTRY = new RegExp(
+  `^(?:${SIMPLE_COMPANY_PROVIDERS.join("|")}):[A-Za-z0-9_-]+(:.+)?$` +
+    "|^workday:[A-Za-z0-9_-]+\.[a-z0-9]+/[A-Za-z0-9_-]+(:.+)?$"
+);
 
 const DEFAULTS: ScrapeConfig = {
   job: [],
   location: [],
   results_wanted: 20,
-  site_name: ["linkedin", "indeed"],
+  site_name: ["linkedin", "indeed", "glassdoor"],
   workers: 4,
   title_exclude: [],
   exclude_companies: [],
+  companies: [],
+  providers: [...COMPANY_PROVIDERS],
   schedule: null,
   fetch_linkedin_description: true,
 };
@@ -49,6 +59,24 @@ function readStringList(
     return [...fallback];
   }
   return value.map((item) => item.trim()).filter(Boolean);
+}
+
+function readCompanies(value: unknown, errors: string[]): string[] {
+  const entries = readStringList(value, DEFAULTS.companies, "companies", errors);
+  const valid = entries.filter((entry) => COMPANY_ENTRY.test(entry));
+  if (valid.length !== entries.length) {
+    errors.push("companies entries must look like provider:board[:Company Name], where provider is greenhouse, lever, ashby or workday. A workday board looks like nvidia.wd5/NVIDIAExternalCareerSite.");
+  }
+  return valid;
+}
+
+function readProviders(value: unknown, errors: string[]): string[] {
+  const entries = readStringList(value, DEFAULTS.providers, "providers", errors);
+  const known = entries.filter((provider) => COMPANY_PROVIDERS.includes(provider));
+  if (known.length !== entries.length) {
+    errors.push("providers must be a list of greenhouse, lever, ashby or workday.");
+  }
+  return known;
 }
 
 function readInteger(
@@ -108,6 +136,8 @@ export function validateConfig(raw: unknown): ConfigValidation {
       "exclude_companies",
       errors
     ),
+    companies: readCompanies(source.companies, errors),
+    providers: readProviders(source.providers, errors),
     schedule: readSchedule(source.schedule, errors),
     fetch_linkedin_description: readBoolean(
       source.fetch_linkedin_description,

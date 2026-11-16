@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { Job, JobStatus } from "@/lib/csv";
 import { formatLocation } from "@/lib/jobs-view";
-import { STATUSES, isActiveStatus, isArchivedStatus, statusLabel } from "@/lib/status";
+import { STATUSES, isActiveStatus, isArchivedStatus, isTrackedStatus, statusLabel } from "@/lib/status";
 import type { StatusLogEntry } from "@/lib/status-log";
 import { buildGanttRows, type GanttData } from "@/lib/gantt";
 import { StatusMenu } from "@/components/status-menu";
@@ -103,9 +103,9 @@ export default function ApplicationsPage() {
     );
   }
 
-  const tracked = jobs.filter((j) => j.status !== "");
+  const tracked = jobs.filter((j) => isTrackedStatus(j.status));
   const activeCount = tracked.filter((j) => isActiveStatus(j.status)).length;
-  const archivedCount = tracked.filter((j) => isArchivedStatus(j.status)).length;
+  const rejectedCount = tracked.filter((j) => j.status === "rejected").length;
   const byStatus = Object.fromEntries(
     COLUMNS.map((s) => [s, tracked.filter((j) => j.status === s)])
   ) as Record<JobStatus, Job[]>;
@@ -118,7 +118,7 @@ export default function ApplicationsPage() {
           <p className="page-subtitle">
             {loading
               ? ""
-              : `${activeCount} active application${activeCount !== 1 ? "s" : ""}, ${archivedCount} archived`}
+              : `${activeCount} active application${activeCount !== 1 ? "s" : ""}, ${rejectedCount} rejected`}
           </p>
         </div>
         <div className="view-toggle" role="group" aria-label="View">
@@ -148,7 +148,7 @@ export default function ApplicationsPage() {
       ) : view === "table" ? (
         <TableView jobs={tracked} pending={pending} onChange={changeStatus} />
       ) : log ? (
-        <GanttView data={buildGanttRows(log.entries, jobs, log.now)} />
+        <GanttView data={buildGanttRows(log.entries, tracked, log.now)} />
       ) : (
         <p className="loading-row">Loading…</p>
       )}
@@ -166,7 +166,7 @@ function KanbanView({
   onChange: ChangeStatus;
 }) {
   const active = COLUMNS.filter((s) => !isArchivedStatus(s));
-  const archive = COLUMNS.filter((s) => isArchivedStatus(s));
+  const archive = COLUMNS.filter((s) => isArchivedStatus(s) && isTrackedStatus(s));
 
   return (
     <div>
@@ -177,8 +177,8 @@ function KanbanView({
       </div>
       {archive.some((s) => byStatus[s].length > 0) && (
         <div className="kanban-archive">
-          <p className="section-title">Archived</p>
-          <div className="kanban-board kanban-board--archive" aria-label="Archived applications">
+          <p className="section-title">Rejected</p>
+          <div className="kanban-board kanban-board--archive" aria-label="Rejected applications">
             {archive.map((col) => (
               <KanbanColumn key={col} status={col} jobs={byStatus[col]} pending={pending} onChange={onChange} />
             ))}

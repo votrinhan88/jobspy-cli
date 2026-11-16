@@ -56,6 +56,7 @@ beforeEach(async () => {
   vi.unstubAllEnvs();
   vi.stubEnv("ANTHROPIC_API_KEY", "sk-test-secret-999");
   vi.stubEnv("ANTHROPIC_MODEL", "");
+  vi.stubEnv("LLM_BASE_URL", "");
   vi.stubGlobal("fetch", fetchMock);
   fetchMock.mockResolvedValue(apiReply(JSON.stringify(analysis)));
   dataDir = await makeDataDir();
@@ -159,6 +160,23 @@ describe("POST /api/jobs/[jobId]/analysis", () => {
     fetchMock.mockResolvedValue(apiReply(JSON.stringify({ ...analysis, score: 11 })));
     await post("acme-ml-aaaa1111", { tag: "backend" });
     expect((await readAnalysis("alice", "acme-ml-aaaa1111", "backend"))?.analysis.score).toBe(11);
+  });
+
+  it("uses a local OpenAI-compatible endpoint when LLM_BASE_URL is set", async () => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "");
+    vi.stubEnv("LLM_BASE_URL", "http://127.0.0.1:8080/v1");
+    vi.stubEnv("LLM_MODEL", "qwen3-8b");
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ choices: [{ message: { content: JSON.stringify(analysis) } }] }),
+    });
+
+    const res = await post("acme-ml-aaaa1111", { tag: "backend" });
+
+    expect(res.status).toBe(200);
+    expect((await res.json()).model).toBe("qwen3-8b");
+    expect(fetchMock.mock.calls[0][0]).toBe("http://127.0.0.1:8080/v1/chat/completions");
   });
 
   it("returns 503 and makes no call without a key", async () => {

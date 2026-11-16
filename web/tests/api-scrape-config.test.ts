@@ -95,7 +95,7 @@ describe("PUT /api/scrape/config validation", () => {
     expect(res.status).toBe(200);
     expect(writeConfig).toHaveBeenCalledWith(
       "alice",
-      expect.objectContaining({ site_name: ["linkedin"] })
+      expect.objectContaining({ site_name: ["linkedin", "glassdoor"] })
     );
   });
 });

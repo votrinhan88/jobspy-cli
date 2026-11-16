@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 import * as status from "@/lib/status";
 
-const { STATUSES, statusLabel, isActiveStatus, isArchivedStatus, isRemote } = status;
+const { STATUSES, statusLabel, isActiveStatus, isArchivedStatus, isSkippedStatus, isTrackedStatus, isRemote } = status;
 
 describe("status module", () => {
   it("lists statuses in pipeline order with sentence-case labels", () => {
     expect(STATUSES).toEqual(["", "shortlisted", "applied", "interview", "offer", "rejected", "skipped"]);
     expect(STATUSES.map(statusLabel)).toEqual([
-      "New",
+      "Untriaged",
       "Shortlisted",
       "Applied",
       "Interview",
@@ -31,6 +31,20 @@ describe("status module", () => {
 
   it("isArchivedStatus is true for rejected and skipped only", () => {
     expect(STATUSES.filter(isArchivedStatus)).toEqual(["rejected", "skipped"]);
+  });
+
+  it("isSkippedStatus is true only for skipped", () => {
+    expect(STATUSES.filter(isSkippedStatus)).toEqual(["skipped"]);
+  });
+
+  it("isTrackedStatus leaves out new and skipped jobs", () => {
+    expect(STATUSES.filter(isTrackedStatus)).toEqual([
+      "shortlisted",
+      "applied",
+      "interview",
+      "offer",
+      "rejected",
+    ]);
   });
 
   it("isRemote accepts true, True, yes, 1 and rejects False, no, 0, empty", () => {

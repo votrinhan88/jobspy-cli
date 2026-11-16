@@ -136,6 +136,61 @@ def _normalize(value) -> str:
     return re.sub(r"[^a-z0-9]+", " ", _text(value).lower()).strip()
 
 
+def _city_key(value) -> str:
+    return _normalize(_ascii(value))
+
+
+# A location that only names a region is not a city. Scoped to Australia so a real
+# city called Victoria keeps its name.
+_AUSTRALIAN_REGIONS = {
+    "nsw",
+    "new south wales",
+    "vic",
+    "victoria",
+    "qld",
+    "queensland",
+    "sa",
+    "south australia",
+    "wa",
+    "western australia",
+    "tas",
+    "tasmania",
+    "nt",
+    "northern territory",
+    "act",
+    "australian capital territory",
+}
+
+# The city facet is a filter, so one metro area must not repeat under several names.
+_CITY_ALIASES = {
+    "greater brisbane": "Brisbane",
+    "melbourne eastern suburbs": "Melbourne",
+    "north sydney": "Sydney",
+    "chatswood": "Sydney",
+    "parramatta": "Sydney",
+    "bella vista": "Sydney",
+    "belrose": "Sydney",
+    "ho chi minh city": "Hồ Chí Minh",
+    "hanoi": "Hà Nội",
+}
+
+# Vietnamese addresses put the administrative rank in front of the city name.
+_CITY_PREFIX = re.compile(r"^\s*(?:thành\s+phố|tp\.?)\s+", re.I)
+
+
+def _canonical_city(city, country) -> str:
+    text = _text(city)
+    if not text:
+        return ""
+    key = _city_key(text)
+    if key in _AUSTRALIAN_REGIONS and _country_key(country) == "australia":
+        return ""
+    mapped = _CITY_ALIASES.get(key)
+    if mapped:
+        return mapped
+    return _CITY_PREFIX.sub("", text).strip() or text
+
+
 def _country_key(value) -> str:
     return re.sub(r"[^a-z0-9]+", "", _ascii(value).lower())
 
@@ -170,12 +225,12 @@ def split_location(location) -> tuple[str, str]:
         city = _METRO_SUFFIX.sub("", text).strip(" ,")
         if city.lower() in {"remote", "anywhere", "worldwide"}:
             city = ""
-        return "", city
+        return "", _canonical_city(city, "")
     country = parts[-1]
     city = parts[0]
     if city.lower() in {"remote", "anywhere", "worldwide"}:
         city = ""
-    return country, city
+    return country, _canonical_city(city, country)
 
 
 def infer_seniority(job_level="", title="") -> str:

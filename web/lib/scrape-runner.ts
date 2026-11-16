@@ -12,6 +12,15 @@ import {
 } from "@/lib/scrape-status";
 
 const REPO_ROOT = path.resolve(process.cwd(), "..");
+const PYTHONW = path.join(REPO_ROOT, ".venv", "Scripts", "pythonw.exe");
+
+function scrapeCommand(args: string[]) {
+  // pythonw is a GUI subsystem binary, so Windows never allocates a console for it.
+  if (process.platform === "win32" && existsSync(PYTHONW)) {
+    return { command: PYTHONW, commandArgs: ["main.py", ...args] };
+  }
+  return { command: "uv", commandArgs: ["run", "python", "main.py", ...args] };
+}
 
 export type StartScrapeResult =
   | { started: true }
@@ -43,15 +52,18 @@ export async function startScrape(profile: string): Promise<StartScrapeResult> {
     started_at: new Date().toISOString(),
     finished_at: null,
     new_jobs: null,
-    updated_jobs: null,
     total_jobs: null,
     error: null,
     source_runs: [],
   });
 
-  const child = spawn("uv", ["run", "python", "main.py", ...args], {
+  const { command, commandArgs } = scrapeCommand(args);
+
+  const child = spawn(command, commandArgs, {
     cwd: REPO_ROOT,
     detached: true,
+    // A detached child gets its own console on Windows, which pops up a command window.
+    windowsHide: true,
     stdio: ["ignore", logFd, logFd],
     env: { ...process.env, PYTHONUNBUFFERED: "1" },
   });
@@ -129,6 +141,10 @@ function buildArgs(config: Awaited<ReturnType<typeof readConfig>>, savePath: str
   args.push("--workers", String(config.workers));
   if (config.title_exclude.length > 0) args.push("--title_exclude", ...config.title_exclude);
   if (config.exclude_companies.length > 0) args.push("--exclude_companies", ...config.exclude_companies);
+  const boards = config.companies.filter((entry) =>
+    config.providers.includes(entry.split(":")[0])
+  );
+  if (boards.length > 0) args.push("--company", ...boards);
   if (config.fetch_linkedin_description) args.push("--fetch_description");
   args.push("--save_path", savePath);
 

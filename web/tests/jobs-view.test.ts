@@ -45,6 +45,46 @@ describe("sortJobs", () => {
     }
   });
 
+  it("sorts by last seen, newest first and oldest first", () => {
+    const jobs = [
+      j("old", { last_seen_at: "2026-08-01T00:00:00Z" }),
+      j("none"),
+      j("new", { last_seen_at: "2026-09-01T00:00:00Z" }),
+    ];
+    expect(ids(sortJobs(jobs, "seen", "desc"))).toEqual(["new", "old", "none"]);
+    expect(ids(sortJobs(jobs, "seen", "asc"))).toEqual(["old", "new", "none"]);
+  });
+
+  it("breaks last seen ties by the posted date, newest first", () => {
+    const run = "2026-09-15T13:00:00Z";
+    const jobs = [
+      j("older-post", { last_seen_at: run, date_posted: "2026-08-01" }),
+      j("newer-post", { last_seen_at: run, date_posted: "2026-09-10" }),
+      j("none", {}),
+    ];
+    expect(ids(sortJobs(jobs, "seen", "desc"))).toEqual([
+      "newer-post",
+      "older-post",
+      "none",
+    ]);
+    expect(ids(sortJobs(jobs, "seen", "asc"))).toEqual([
+      "newer-post",
+      "older-post",
+      "none",
+    ]);
+  });
+
+  it("sorts by salary by the top of the range", () => {
+    const jobs = [
+      j("low", { min_amount: "50000", max_amount: "60000" }),
+      j("none"),
+      j("high", { min_amount: "150000", max_amount: "200000" }),
+      j("open", { min_amount: "90000" }),
+    ];
+    expect(ids(sortJobs(jobs, "salary", "desc"))).toEqual(["high", "open", "low", "none"]);
+    expect(ids(sortJobs(jobs, "salary", "asc"))).toEqual(["low", "open", "high", "none"]);
+  });
+
   it("sorts by status in pipeline order", () => {
     const order: JobStatus[] = ["skipped", "offer", "", "rejected", "applied", "interview", "shortlisted"];
     const jobs = order.map((s, i) => j(String(i), { status: s }));
@@ -110,7 +150,7 @@ describe("filterJobs", () => {
 
   it("status counts ignore the status filter but respect the query and the remote filter", () => {
     const counts = statusCounts(jobs, { query: "engineer", statuses: new Set<JobStatus>(["applied"]), remoteOnly: false });
-    expect(counts).toEqual({ all: 3, "": 0, shortlisted: 1, applied: 1, interview: 0, offer: 0, rejected: 0, skipped: 1 });
+    expect(counts).toEqual({ all: 3, new: 0, "": 0, shortlisted: 1, applied: 1, interview: 0, offer: 0, rejected: 0, skipped: 1 });
     const remote = statusCounts(jobs, { ...none, remoteOnly: true });
     expect(remote.all).toBe(2);
     expect(remote.skipped).toBe(1);
@@ -287,40 +327,81 @@ describe("filterJobs facets", () => {
   ];
 
   it("filters by country and city", () => {
-    expect(ids(filterJobs(jobs, { ...none, country: "Australia" }))).toEqual(["1", "2"]);
-    expect(ids(filterJobs(jobs, { ...none, city: "Hanoi" }))).toEqual(["3"]);
+    expect(ids(filterJobs(jobs, { ...none, country: ["Australia"] }))).toEqual(["1", "2"]);
+    expect(ids(filterJobs(jobs, { ...none, city: ["Hanoi"] }))).toEqual(["3"]);
+  });
+
+  it("several values in one facet show the union", () => {
+    expect(ids(filterJobs(jobs, { ...none, country: ["Australia", "Vietnam"] }))).toEqual(["1", "2", "3"]);
+    expect(ids(filterJobs(jobs, { ...none, city: ["Sydney", "Hanoi"] }))).toEqual(["1", "3"]);
+  });
+
+  it("different facets combine with AND", () => {
+    expect(
+      ids(filterJobs(jobs, { ...none, country: ["Australia"], city: ["Sydney", "Hanoi"] }))
+    ).toEqual(["1"]);
   });
 
   it("filters by work mode, seniority and employment type", () => {
-    expect(ids(filterJobs(jobs, { ...none, workMode: "remote" }))).toEqual(["1"]);
-    expect(ids(filterJobs(jobs, { ...none, seniority: "senior" }))).toEqual(["1", "2"]);
-    expect(ids(filterJobs(jobs, { ...none, employmentType: "full_time" }))).toEqual(["1", "3"]);
+    expect(ids(filterJobs(jobs, { ...none, workMode: ["remote"] }))).toEqual(["1"]);
+    expect(ids(filterJobs(jobs, { ...none, seniority: ["senior"] }))).toEqual(["1", "2"]);
+    expect(ids(filterJobs(jobs, { ...none, employmentType: ["full_time"] }))).toEqual(["1", "3"]);
   });
 
   it("combines facet filters", () => {
     expect(
-      ids(filterJobs(jobs, { ...none, country: "Australia", workMode: "hybrid", seniority: "senior" }))
+      ids(
+        filterJobs(jobs, {
+          ...none,
+          country: ["Australia"],
+          workMode: ["hybrid"],
+          seniority: ["senior"],
+        })
+      )
     ).toEqual(["2"]);
   });
 
-  it("an empty facet value does not filter", () => {
+  it("an empty facet list does not filter", () => {
     expect(
       ids(
         filterJobs(jobs, {
           ...none,
-          country: "",
-          city: "",
-          workMode: "",
-          seniority: "",
-          employmentType: "",
+          country: [],
+          city: [],
+          workMode: [],
+          seniority: [],
+          employmentType: [],
         })
       )
     ).toEqual(["1", "2", "3"]);
   });
 
   it("status counts respect the facet filters", () => {
-    const counts = statusCounts(jobs, { ...none, country: "Australia" });
+    const counts = statusCounts(jobs, { ...none, country: ["Australia"] });
     expect(counts.all).toBe(2);
+  });
+});
+
+describe("filterJobs latest run", () => {
+  const run = "2026-09-15T12:00:00Z";
+  const jobs = [
+    j("old", { first_seen_at: "2026-08-01T00:00:00Z" }),
+    j("new", { first_seen_at: "2026-09-15T13:00:00Z" }),
+    j("same", { first_seen_at: run }),
+    j("none"),
+  ];
+
+  it("keeps only jobs first seen in the latest run", () => {
+    expect(ids(filterJobs(jobs, { ...none, newOnly: true, newSince: run }))).toEqual(["new", "same"]);
+  });
+
+  it("does not filter when the New chip is off", () => {
+    expect(ids(filterJobs(jobs, { ...none, newSince: run }))).toEqual(["old", "new", "same", "none"]);
+  });
+
+  it("status counts include the latest-run count", () => {
+    const counts = statusCounts(jobs, { ...none, newSince: run });
+    expect(counts.new).toBe(2);
   });
 });
 

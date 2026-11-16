@@ -14,6 +14,16 @@ export function isStale(
   return now - seen > days * DAY_MS;
 }
 
+export function isNewInRun(
+  firstSeenAt: string,
+  runStartedAt: string | null | undefined
+): boolean {
+  const first = Date.parse((firstSeenAt ?? "").trim());
+  const run = Date.parse((runStartedAt ?? "").trim());
+  if (Number.isNaN(first) || Number.isNaN(run)) return false;
+  return first >= run;
+}
+
 export function isClosed(closedAt: string): boolean {
   return (closedAt ?? "").trim() !== "";
 }

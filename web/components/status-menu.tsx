@@ -15,7 +15,7 @@ interface StatusMenuProps {
 
 const CHOICES: { status: JobStatus; label: string }[] = [
   ...STATUSES.filter((s) => s !== "").map((s) => ({ status: s, label: statusLabel(s) })),
-  { status: "", label: "Back to new" },
+  { status: "", label: "Back to untriaged" },
 ];
 
 export function StatusMenu({ current, jobTitle, disabled, onSelect }: StatusMenuProps) {

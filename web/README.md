@@ -29,7 +29,7 @@ The scraper needs the Python environment. From the repository root, run `uv sync
 
 ## Pages
 
-Profile, Resume, Scrape, Jobs, Applications (Kanban, Table and Gantt views) and Statistics.
+Profile, Resume, Scrape, Jobs, Applications (Kanban, Table and Gantt views), Archived and Statistics.
 
 ## Data and tests
 

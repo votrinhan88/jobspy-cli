@@ -53,9 +53,9 @@ describe("readConfig fetch_linkedin_description field", () => {
 describe("readConfig site list", () => {
   beforeEach(() => vi.resetAllMocks());
 
-  it("does not list Google Jobs in the defaults", async () => {
+  it("ticks LinkedIn, Indeed and Glassdoor by default", async () => {
     vi.mocked(fs.readFile).mockRejectedValue(new Error("ENOENT"));
-    expect((await readConfig("p")).site_name).toEqual(["linkedin", "indeed"]);
+    expect((await readConfig("p")).site_name).toEqual(["linkedin", "indeed", "glassdoor"]);
   });
 
   it("drops Google Jobs from a saved site list because it returns no data", async () => {
@@ -129,19 +129,23 @@ describe("validateConfig", () => {
     expect(validateConfig({ schedule: "0 8 * * *" }).config.schedule).toBe("0 8 * * *");
   });
 
-  it("drops the unsupported sites and keeps the rest", () => {
+  it("drops Google Jobs and keeps Glassdoor", () => {
     const { config } = validateConfig({ site_name: ["linkedin", "google", "glassdoor", "indeed"] });
-    expect(config.site_name).toEqual(["linkedin", "indeed"]);
+    expect(config.site_name).toEqual(["linkedin", "glassdoor", "indeed"]);
   });
 
   it("uses the default sites when every saved site is unsupported", () => {
-    expect(validateConfig({ site_name: ["google"] }).config.site_name).toEqual(["linkedin", "indeed"]);
+    expect(validateConfig({ site_name: ["google"] }).config.site_name).toEqual([
+      "linkedin",
+      "indeed",
+      "glassdoor",
+    ]);
   });
 
   it("reports a site list that is not text values", () => {
     const { config, errors } = validateConfig({ site_name: ["linkedin", 4] });
     expect(errors).toContain("site_name must be a list of text values.");
-    expect(config.site_name).toEqual(["linkedin", "indeed"]);
+    expect(config.site_name).toEqual(["linkedin", "indeed", "glassdoor"]);
   });
 
   it("reads a legacy file and fills the missing fields", async () => {
@@ -172,6 +176,8 @@ describe("writeConfig", () => {
       workers: 4,
       title_exclude: [],
       exclude_companies: [],
+      companies: [],
+      providers: ["greenhouse", "lever", "ashby", "workday"],
       schedule: null,
       fetch_linkedin_description: true,
     });
@@ -193,5 +199,112 @@ describe("writeConfig", () => {
       } as never)
     ).rejects.toThrow("job must be a list of text values.");
     expect(fs.writeFile).not.toHaveBeenCalled();
+  });
+});
+
+describe("readConfig company boards", () => {
+  beforeEach(() => vi.resetAllMocks());
+
+  it("defaults to an empty list when the file is missing", async () => {
+    vi.mocked(fs.readFile).mockRejectedValue(new Error("ENOENT"));
+    expect((await readConfig("p")).companies).toEqual([]);
+  });
+
+  it("keeps saved boards", async () => {
+    vi.mocked(fs.readFile).mockResolvedValue(
+      JSON.stringify({ companies: ["greenhouse:gitlab:GitLab"] })
+    );
+    expect((await readConfig("p")).companies).toEqual(["greenhouse:gitlab:GitLab"]);
+  });
+
+  it("rejects an unknown provider", () => {
+    const checked = validateConfig({ companies: ["smartrecruiters:acme:Acme"] });
+    expect(checked.errors).toEqual([
+      "companies entries must look like provider:board[:Company Name], where provider is greenhouse, lever, ashby or workday. A workday board looks like nvidia.wd5/NVIDIAExternalCareerSite.",
+    ]);
+    expect(checked.config.companies).toEqual([]);
+  });
+
+  it("rejects a workday board without a site", () => {
+    const checked = validateConfig({ companies: ["workday:nvidia.wd5:NVIDIA"] });
+    expect(checked.errors).toEqual([
+      "companies entries must look like provider:board[:Company Name], where provider is greenhouse, lever, ashby or workday. A workday board looks like nvidia.wd5/NVIDIAExternalCareerSite.",
+    ]);
+    expect(checked.config.companies).toEqual([]);
+  });
+
+  it("accepts a workday board", () => {
+    const checked = validateConfig({
+      companies: ["workday:nvidia.wd5/NVIDIAExternalCareerSite:NVIDIA"],
+    });
+    expect(checked.errors).toEqual([]);
+    expect(checked.config.companies).toEqual([
+      "workday:nvidia.wd5/NVIDIAExternalCareerSite:NVIDIA",
+    ]);
+  });
+
+  it("rejects a board with a bad character", () => {
+    const checked = validateConfig({ companies: ["greenhouse:acme/../x"] });
+    expect(checked.errors).toHaveLength(1);
+    expect(checked.config.companies).toEqual([]);
+  });
+
+  it("keeps the good entries and reports the bad one", () => {
+    const checked = validateConfig({ companies: ["greenhouse:acme:Acme", "nope"] });
+    expect(checked.config.companies).toEqual(["greenhouse:acme:Acme"]);
+    expect(checked.errors).toHaveLength(1);
+  });
+
+  it("accepts a lever board", () => {
+    const checked = validateConfig({ companies: ["lever:acme:Acme Corporation"] });
+    expect(checked.errors).toEqual([]);
+    expect(checked.config.companies).toEqual(["lever:acme:Acme Corporation"]);
+  });
+
+  it("accepts an ashby board", () => {
+    const checked = validateConfig({ companies: ["ashby:acme:Acme Corporation"] });
+    expect(checked.errors).toEqual([]);
+    expect(checked.config.companies).toEqual(["ashby:acme:Acme Corporation"]);
+  });
+
+  it("accepts a company name with spaces and a colon", () => {
+    const checked = validateConfig({ companies: ["greenhouse:acme:Acme: Labs"] });
+    expect(checked.errors).toEqual([]);
+    expect(checked.config.companies).toEqual(["greenhouse:acme:Acme: Labs"]);
+  });
+});
+
+describe("readConfig ats providers", () => {
+  beforeEach(() => vi.resetAllMocks());
+
+  it("ticks every provider by default", async () => {
+    vi.mocked(fs.readFile).mockRejectedValue(new Error("ENOENT"));
+    expect((await readConfig("p")).providers).toEqual([
+      "greenhouse",
+      "lever",
+      "ashby",
+      "workday",
+    ]);
+  });
+
+  it("keeps the saved ticks", async () => {
+    vi.mocked(fs.readFile).mockResolvedValue(
+      JSON.stringify({ providers: ["ashby"] })
+    );
+    expect((await readConfig("p")).providers).toEqual(["ashby"]);
+  });
+
+  it("accepts no ticks", async () => {
+    const checked = validateConfig({ providers: [] });
+    expect(checked.errors).toEqual([]);
+    expect(checked.config.providers).toEqual([]);
+  });
+
+  it("drops an unknown provider and reports it", () => {
+    const checked = validateConfig({ providers: ["greenhouse", "workable"] });
+    expect(checked.config.providers).toEqual(["greenhouse"]);
+    expect(checked.errors).toEqual([
+      "providers must be a list of greenhouse, lever, ashby or workday.",
+    ]);
   });
 });

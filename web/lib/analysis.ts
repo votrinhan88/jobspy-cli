@@ -54,13 +54,35 @@ const SYSTEM_PROMPT = [
   "Use short sentences. Do not invent experience, skills, tools or results. If the resume shows weak or missing evidence, say so in the verdict and the reasoning.",
 ].join("\n");
 
+export interface LocalModelConfig {
+  baseUrl: string;
+  model: string;
+  apiKey: string;
+}
+
+const LOCAL_MODEL_DEFAULT = "local-model";
+
+export function localModelConfig(
+  env: Record<string, string | undefined> = process.env
+): LocalModelConfig | null {
+  const baseUrl = env.LLM_BASE_URL?.trim();
+  if (!baseUrl) return null;
+  return {
+    baseUrl,
+    model: env.LLM_MODEL?.trim() || LOCAL_MODEL_DEFAULT,
+    apiKey: env.LLM_API_KEY?.trim() || "",
+  };
+}
+
 export function resolveModel(env: Record<string, string | undefined> = process.env): string {
+  const local = localModelConfig(env);
+  if (local) return local.model;
   const model = env.ANTHROPIC_MODEL?.trim();
   return model ? model : DEFAULT_MODEL;
 }
 
 export function analysisAvailable(env: Record<string, string | undefined> = process.env): boolean {
-  return Boolean(env.ANTHROPIC_API_KEY?.trim());
+  return Boolean(env.ANTHROPIC_API_KEY?.trim() || localModelConfig(env));
 }
 
 export function buildMessages(job: JobText, resumeText: string): { system: string; user: string } {
@@ -170,38 +192,65 @@ export function parseAnalysis(text: string): Analysis | null {
 
 type FetchLike = (url: string, init: RequestInit) => Promise<Response>;
 
+function chatCompletionsUrl(baseUrl: string): string {
+  return `${baseUrl.replace(/\/+$/, "")}/chat/completions`;
+}
+
 export async function runAnalysis({
   job,
   resumeText,
   apiKey,
   model,
+  baseUrl,
   fetchImpl = fetch as FetchLike,
 }: {
   job: JobText;
   resumeText: string;
   apiKey: string;
   model: string;
+  baseUrl?: string;
   fetchImpl?: FetchLike;
 }): Promise<AnalysisResult> {
   const { system, user } = buildMessages(job, resumeText);
+  const local = Boolean(baseUrl);
   let response: Response;
   try {
-    response = await fetchImpl(API_URL, {
+    response = await fetchImpl(baseUrl ? chatCompletionsUrl(baseUrl) : API_URL, {
       method: "POST",
-      headers: {
-        "x-api-key": apiKey,
-        "anthropic-version": API_VERSION,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        model,
-        max_tokens: MAX_TOKENS,
-        system,
-        messages: [{ role: "user", content: user }],
-      }),
+      headers: local
+        ? {
+            ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+            "content-type": "application/json",
+          }
+        : {
+            "x-api-key": apiKey,
+            "anthropic-version": API_VERSION,
+            "content-type": "application/json",
+          },
+      body: JSON.stringify(
+        local
+          ? {
+              model,
+              max_tokens: MAX_TOKENS,
+              temperature: 0,
+              messages: [
+                { role: "system", content: system },
+                { role: "user", content: user },
+              ],
+            }
+          : {
+              model,
+              max_tokens: MAX_TOKENS,
+              system,
+              messages: [{ role: "user", content: user }],
+            }
+      ),
     });
   } catch {
-    return { ok: false, error: "Could not reach the Claude API." };
+    return {
+      ok: false,
+      error: local ? "Could not reach the model endpoint." : "Could not reach the Claude API.",
+    };
   }
 
   let body: unknown = null;
@@ -212,20 +261,41 @@ export async function runAnalysis({
   }
 
   if (!response.ok) {
-    const message = isObject(body) && isObject(body.error) ? body.error.message : undefined;
-    const usable = typeof message === "string" && message.trim() !== "" && !message.includes(apiKey);
+    const error = isObject(body) ? body.error : undefined;
+    const message = isObject(error)
+      ? error.message
+      : typeof error === "string"
+        ? error
+        : undefined;
+    const leaksKey = apiKey !== "" && typeof message === "string" && message.includes(apiKey);
+    const usable = typeof message === "string" && message.trim() !== "" && !leaksKey;
     return {
       ok: false,
       error: usable ? message : `The API answered with status ${response.status}`,
     };
   }
 
+  const analysis = parseAnalysis(local ? openAiText(body) : anthropicText(body));
+  if (!analysis) return { ok: false, error: UNREADABLE_REPLY };
+  return { ok: true, analysis };
+}
+
+function anthropicText(body: unknown): string {
   const content = isObject(body) && Array.isArray(body.content) ? body.content : [];
-  const text = content
+  return content
     .filter((block): block is { type: "text"; text: string } => isObject(block) && block.type === "text" && typeof block.text === "string")
     .map((block) => block.text)
     .join("");
-  const analysis = parseAnalysis(text);
-  if (!analysis) return { ok: false, error: UNREADABLE_REPLY };
-  return { ok: true, analysis };
+}
+
+function openAiText(body: unknown): string {
+  const choices = isObject(body) && Array.isArray(body.choices) ? body.choices : [];
+  const message = isObject(choices[0]) && isObject(choices[0].message) ? choices[0].message : null;
+  const content = message ? message.content : undefined;
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content
+    .filter((part): part is { type: "text"; text: string } => isObject(part) && typeof part.text === "string")
+    .map((part) => part.text)
+    .join("");
 }

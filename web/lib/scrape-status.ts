@@ -19,7 +19,6 @@ export interface ScrapeStatus {
   started_at: string | null;
   finished_at: string | null;
   new_jobs: number | null;
-  updated_jobs: number | null;
   total_jobs: number | null;
   error: string | null;
   pid: number | null;
@@ -31,7 +30,6 @@ const IDLE: ScrapeStatus = {
   started_at: null,
   finished_at: null,
   new_jobs: null,
-  updated_jobs: null,
   total_jobs: null,
   error: null,
   pid: null,

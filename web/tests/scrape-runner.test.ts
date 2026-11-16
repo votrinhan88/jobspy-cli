@@ -43,6 +43,8 @@ const CONFIG = {
   workers: 4,
   title_exclude: [],
   exclude_companies: [],
+  companies: [],
+  providers: ["greenhouse", "lever", "ashby", "workday"],
   schedule: null,
   fetch_linkedin_description: true,
 };
@@ -94,11 +96,54 @@ describe("startScrape", () => {
     );
   });
 
+  it.skipIf(process.platform !== "win32")(
+    "runs the venv pythonw on Windows so no console window opens",
+    async () => {
+      readScrapeStatus.mockResolvedValue({ status: "idle" });
+      await startScrape("alice");
+      const [command, args, options] = spawn.mock.calls[0];
+      expect(command).toMatch(/pythonw\.exe$/);
+      expect(args[0]).toBe("main.py");
+      expect(options).toEqual(
+        expect.objectContaining({ detached: true, windowsHide: true })
+      );
+    }
+  );
+
+  it.skipIf(process.platform !== "win32")(
+    "falls back to uv when the venv pythonw is missing",
+    async () => {
+      readScrapeStatus.mockResolvedValue({ status: "idle" });
+      existsSync.mockReturnValue(false);
+      await startScrape("alice");
+      const [command, args] = spawn.mock.calls[0];
+      expect(command).toBe("uv");
+      expect(args.slice(0, 3)).toEqual(["run", "python", "main.py"]);
+    }
+  );
+
   it("saves jobs to the profile jobs.csv path", async () => {
     readScrapeStatus.mockResolvedValue({ status: "idle" });
     await startScrape("alice");
     const args: string[] = spawn.mock.calls[0][1];
     expect(args[args.indexOf("--save_path") + 1]).toBe("/custom-data/alice/jobs.csv");
+  });
+
+  it("passes the company boards to the scraper", async () => {
+    readScrapeStatus.mockResolvedValue({ status: "idle" });
+    readConfig.mockResolvedValue({ ...CONFIG, companies: ["greenhouse:gitlab:GitLab"] });
+    await startScrape("alice");
+    const args: string[] = spawn.mock.calls[0][1];
+    expect(args.slice(args.indexOf("--company"), args.indexOf("--company") + 2)).toEqual([
+      "--company",
+      "greenhouse:gitlab:GitLab",
+    ]);
+  });
+
+  it("omits the company flag when no board is set", async () => {
+    readScrapeStatus.mockResolvedValue({ status: "idle" });
+    await startScrape("alice");
+    expect(spawn.mock.calls[0][1]).not.toContain("--company");
   });
 
   it("asks for LinkedIn descriptions when the option is on", async () => {
@@ -309,5 +354,32 @@ describe("startScrape when the profile folder is gone", () => {
       "alice",
       expect.objectContaining({ status: "done" })
     );
+  });
+
+  it("drops boards from an unticked provider", async () => {
+    readScrapeStatus.mockResolvedValue({ status: "idle" });
+    readConfig.mockResolvedValue({
+      ...CONFIG,
+      companies: ["greenhouse:acme:Acme", "lever:beta:Beta"],
+      providers: ["greenhouse"],
+    });
+    await startScrape("alice");
+    const args: string[] = spawn.mock.calls[0][1];
+    expect(args.slice(args.indexOf("--company"), args.indexOf("--company") + 2)).toEqual([
+      "--company",
+      "greenhouse:acme:Acme",
+    ]);
+  });
+
+  it("omits the company flag when no provider is ticked", async () => {
+    readScrapeStatus.mockResolvedValue({ status: "idle" });
+    readConfig.mockResolvedValue({
+      ...CONFIG,
+      companies: ["greenhouse:acme:Acme"],
+      providers: [],
+    });
+    await startScrape("alice");
+    const args: string[] = spawn.mock.calls[0][1];
+    expect(args).not.toContain("--company");
   });
 });

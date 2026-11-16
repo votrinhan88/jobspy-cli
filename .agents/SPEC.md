@@ -96,12 +96,12 @@ All existing scraper columns plus:
 | `status` | string | `""` | One of: `shortlisted`, `applied`, `interview`, `offer`, `rejected`, `skipped`, `""`. Written by scraper (empty). Updated by web app. Preserved by upsert. |
 | `status_updated_at` | string | `""` | ISO 8601 timestamp. Set by web app on status change. Preserved by upsert. |
 | `region` | string | `""` | State or province of `location`, from the geocoder. Filled after the upsert, only where empty, for the location the row keeps. Old rows get it from `scripts/backfill_region.py --save_path <jobs.csv>`. Not in `_PRESERVE_ON_UPSERT`, because it is derived from `location`. |
-| `first_seen_at` | string | run time | ISO 8601 timestamp of the first scrape that returned the job. Set once and never overwritten. Old rows get it on the next upsert. |
+| `first_seen_at` | string | run time | ISO 8601 timestamp of the first scrape that returned the job. Set once and never overwritten. Rows from before the lifecycle columns keep it empty, because the app cannot prove their first sighting. |
 | `last_seen_at` | string | run time | ISO 8601 timestamp of the most recent scrape that returned the job. Updated on every match. |
 | `closed_at` | string | `""` | ISO 8601 timestamp when a URL probe returned 404 or 410. A later sighting clears it. |
 | `closed_reason` | string | `""` | `url_404` or `url_410`. Empty while the job is open. |
 | `country` | string | derived | Last part of a location with a comma. A single part counts as a country only when it matches a known country name. Otherwise empty. Old rows get it from `scripts/backfill_facets.py --save_path <jobs.csv>`. |
-| `city` | string | derived | First part of a location with a comma. A single metro-area name loses "Metropolitan Area", "Capital Region", "Area" or "Region". "Remote", "Anywhere" and "Worldwide" become empty. |
+| `city` | string | derived | First part of a location with a comma. A single metro-area name loses "Metropolitan Area", "Capital Region", "Area" or "Region". "Remote", "Anywhere" and "Worldwide" become empty. One metro area has one label: a lone Australian state name becomes empty, metro and suburb names roll up to the metro city, and the Vietnamese "Thành phố" or "TP." prefix is dropped. Unknown names stay as they are. |
 | `work_mode` | string | derived | `remote`, `hybrid`, `onsite` or `""`. |
 | `seniority` | string | derived | `intern`, `junior`, `mid`, `senior`, `lead`, `manager`, `director`, `executive` or `""`. |
 | `employment_type` | string | derived | `full_time`, `part_time`, `contract`, `internship`, `temporary`, `volunteer`, `other` or `""`. |
@@ -123,15 +123,19 @@ A match by site and id, by URL, or by the fallback updates the existing row. A m
 
 A new row gets `first_seen_at` and `last_seen_at` from the scrape run time. A matched row keeps `first_seen_at` and gets a new `last_seen_at`. A later sighting clears `closed_at` and `closed_reason`.
 
+A row from before the lifecycle columns gets `last_seen_at` when a later scrape returns it. Its `first_seen_at` stays empty, so the app never marks an old row as New by mistake.
+
 A missing search result does not close a job. A keyword search is not a full catalog. The engine closes a row only when a URL probe returns 404 or 410. It probes `job_url_direct` first, then `job_url`. It probes only canonical rows that have no `closed_at` and no sighting for more than 14 days. A timeout, 403, 500 or other result leaves the row open.
 
-Rows are never deleted. Old rows get `first_seen_at` and `last_seen_at` on the next upsert.
+Rows are never deleted. A row with no sighting and no first-seen time stays empty. A later run does not invent timestamps for it.
 
 ### Facets
 
 The engine writes five facets. The rules are deterministic. There is no model and no network call.
 
-- `country` and `city` come from `location`. `country` is the last comma part, and `city` is the first. A single part is a country only when it matches a known country name from `jobspy.model.Country` plus a few aliases. A single metro area such as "Greater Brisbane Area" becomes the city "Greater Brisbane", not a country.
+- `country` and `city` come from `location`. `country` is the last comma part, and `city` is the first. A single part is a country only when it matches a known country name from `jobspy.model.Country` plus a few aliases. A single metro area such as "Greater Brisbane Area" becomes the city "Brisbane", not a country.
+- The city value is one label per metro area, because the city facet is a filter. A location that only names an Australian state gives an empty city, so "NSW, Australia" keeps the country and the region. Metro and suburb names roll up: "Greater Brisbane" becomes "Brisbane", and "North Sydney", "Chatswood", "Parramatta", "Bella Vista" and "Belrose" become "Sydney". The Vietnamese prefix "Thành phố" or "TP." is dropped, so the labels are "Hồ Chí Minh", "Hà Nội", "Đà Nẵng" and "Hải Phòng". The English names "Ho Chi Minh City" and "Hanoi" map to the same labels. A name that is not in the table passes through unchanged.
+- The table is `_CITY_ALIASES` in `facets.py`, with `_AUSTRALIAN_REGIONS`, `_CITY_PREFIX` and `_canonical_city`. It is a fixed list, not a gazetteer. No model and no network call.
 - `work_mode` uses `is_remote` first. Then it reads clear phrases in the title and location, then the description. The order is hybrid, remote, onsite. A bare "remote" in a long description is not a match. "Remote Sensing" and "Hybrid Cloud" are not work modes.
 - `seniority` uses `job_level` first. The title is the fallback. "Lead Generation" is not lead, and "Back End Cashier" is not a level. Principal and staff roles map to lead.
 - `employment_type` uses `job_type` first. The title and description are the fallback. "Internal Auditor" is not an internship.
@@ -140,15 +144,15 @@ The engine writes five facets. The rules are deterministic. There is no model an
 
 ### Status pipeline
 
-Pipeline order (used for sorting and display): `""` (new), `shortlisted`, `applied`, `interview`, `offer`, `rejected`, `skipped`.
+Pipeline order (used for sorting and display): `""` (untriaged), `shortlisted`, `applied`, `interview`, `offer`, `rejected`, `skipped`.
 
-Statuses are free-flowing. Any status can move to any other status, including back to `""`. There is no transition table, no disabled move and no confirmation dialog. Undo is the safety net. The single source of truth is `web/lib/status.ts` (order, labels, `isActiveStatus`, `isArchivedStatus`, `isRemote`).
+Statuses are free-flowing. Any status can move to any other status, including back to `""`. There is no transition table, no disabled move and no confirmation dialog. Undo is the safety net. The single source of truth is `web/lib/status.ts` (order, labels, `isActiveStatus`, `isArchivedStatus`, `isSkippedStatus`, `isTrackedStatus`, `isRemote`).
 
 - Active: `shortlisted`, `applied`, `interview`, `offer`.
-- Archived: `rejected`, `skipped`.
+- Archived: `rejected`, `skipped`. Rejected rows stay in the Applications Rejected section. Skipped rows move to the Archived page.
 - Remote: `is_remote` is `true`, `yes` or `1` (any case).
 
-Jobs enter the Applications page when `status` is non-empty. A job set back to `""` leaves Applications and shows as new on Jobs.
+Jobs enter the Applications page when `status` is tracked. A job set back to `""` leaves Applications and returns to Jobs as Untriaged. It gets the New badge only when `first_seen_at` is in the latest scrape run.
 
 ### `status_log.jsonl` structure
 
@@ -181,6 +185,8 @@ The Python writer (`JobScraper._write_jobs`) fills every missing column from `sc
   "workers": 4,
   "title_exclude": [],
   "exclude_companies": [],
+  "companies": [],
+  "providers": ["greenhouse", "lever", "ashby", "workday"],
   "schedule": null,
   "fetch_linkedin_description": true
 }
@@ -188,9 +194,13 @@ The Python writer (`JobScraper._write_jobs`) fills every missing column from `sc
 
 `fetch_linkedin_description` (default `true`, also for files without the field) adds `--fetch_description` to the scrape. LinkedIn gives no job text without it, and scrapes get slower. The scraper keeps the `description` column in `jobs.csv`. On upsert a known job gets the new description only when it is not empty, so a scrape without text never erases an old description. `description` is not in `_PRESERVE_ON_UPSERT`.
 
+`companies` (default `[]`, also for files without the field) adds `--company` for each entry. An entry must look like `greenhouse:board[:Company Name]`; the other providers are `lever`, `ashby` and `workday`. A Workday entry needs its host cluster and site, as in `workday:nvidia.wd5/NVIDIAExternalCareerSite:NVIDIA`. The web app reports and drops an entry that does not match, so a bad value cannot build another URL. This field has its own syntax because a company board is not a job site.
+
+`providers` (default every ATS provider) is the tick list on the Scrape page. The runner passes `--company` only for entries whose provider is ticked, so a board stays saved while its provider is off. An unknown provider is dropped with an error.
+
 All fields except `schedule` and `fetch_linkedin_description` match existing CLI arguments. The web app reads this file as form defaults and writes it back on change.
 
-`validateConfig` in `web/lib/config.ts` checks every field. A missing field takes the default. A bad field takes the default and adds an error. `readConfig` uses the repaired config, so one bad field never breaks the Scrape page. `writeConfig` rejects a config that has an error and writes nothing. The `PUT` route returns 400 with the first error. `results_wanted` must be a whole number from 1 to 100. `workers` must be a whole number from 1 to 16. `site_name` drops `google` and `glassdoor`, and falls back to `linkedin` and `indeed` when no site remains.
+`validateConfig` in `web/lib/config.ts` checks every field. A missing field takes the default. A bad field takes the default and adds an error. `readConfig` uses the repaired config, so one bad field never breaks the Scrape page. `writeConfig` rejects a config that has an error and writes nothing. The `PUT` route returns 400 with the first error. `results_wanted` must be a whole number from 1 to 100. `workers` must be a whole number from 1 to 16. `site_name` drops `google`, and falls back to `linkedin`, `indeed` and `glassdoor` when no site remains.
 
 `schedule` is a cron expression (for example `0 8 * * *`) or `null` (off). A missing field reads as `null`. The server registers one `node-cron` task per profile that has a schedule. It registers all saved schedules at startup (`web/instrumentation.ts`) and re-registers a profile when `PUT /api/scrape/config` saves a change. A scheduled run uses the same `startScrape` function as `POST /api/scrape/run`, so it skips when a scrape is already running for that profile. Deleting a profile unregisters its task. Renaming a profile unregisters the old task and registers the saved schedule under the new name. Schedules use server local time and fire only while the server process runs. `PUT /api/scrape/config` rejects a schedule while `job` is empty. A scheduled run with no keywords skips and logs one line.
 
@@ -204,7 +214,6 @@ Written by the web server (`lib/scrape-runner.ts`). Read by the web app via poll
   "started_at": null,
   "finished_at": null,
   "new_jobs": null,
-  "updated_jobs": null,
   "total_jobs": null,
   "error": null,
   "pid": null,
@@ -235,7 +244,7 @@ Written by the web server (`lib/scrape-runner.ts`). Read by the web app via poll
 
 The Python engine writes both files next to `jobs.csv`.
 
-`scrape_run.json` records `started_at`, `finished_at`, `new_jobs`, `total_jobs` and the per-source `sources` list. The web server reads it after the child exits to fill `scrape_status.json`. It does not parse the log.
+`scrape_run.json` records `started_at`, `finished_at`, `new_jobs`, `changed_jobs`, `total_jobs` and the per-source `sources` list. `changed_jobs` counts existing rows whose stored content changed in this run. The status, the lifecycle fields, the geocoded location and the facets do not count. The web server reads it after the child exits to fill `scrape_status.json`. It does not parse the log.
 
 `source_health.json` stores the per-site `consecutive_failures`, `cooldown_until`, `last_error`, `last_error_at` and `last_success_at`. After three consecutive failed runs, a site gets a cooldown of 1 hour, doubling up to 24 hours. A run skips a site while its cooldown is live and records it as `skipped`. A successful run resets the count and clears the cooldown.
 
@@ -251,38 +260,56 @@ The Python engine writes both files next to `jobs.csv`.
 - "Run scrape" button starts the Python subprocess. Disabled while a run is in progress.
 - The engine calls each site separately. A failed site does not stop the other sites.
 - Progress indicator polls `GET /api/scrape/status` every 5 seconds.
-- On completion: diff summary shows new jobs added, existing jobs updated, total jobs.
+- On completion: diff summary shows new jobs added and total jobs.
 - The counts include canonical rows only. A row with a non-empty `duplicate_of` stays in the CSV but is not counted.
 - The source table shows the last run's sites, status, job count, duration and error.
 - Scrape history: list of past runs with timestamp, duration, and job counts.
 
 ### Jobs
 
-**Function:** View all rows in `jobs.csv`, regardless of status.
+**Function:** View active rows in `jobs.csv`. Skipped rows live on the Archived page.
 
 - Table of all scraped jobs. Default sort: Posted, newest first. The Title, Company, Location, Posted and Status headers are sort buttons with `aria-sort`. Empty values sort last. Status sorts in pipeline order.
 - The Location sort orders by country (the last part of `location`), then region, then city. Empty values sort last in both directions. A "Group by location" toggle (`aria-pressed`, off by default) adds country and region header rows with job counts. Countries and regions are alphabetical, "Unknown location" and "No region" come last, and the current sort orders the rows inside each region. The logic is in `web/lib/jobs-view.ts` (`splitLocation`, `groupByLocation`).
-- Status filter chips with counts: All, New, Shortlisted, Applied, Interview, Offer, Rejected, Skipped (toggle buttons with `aria-pressed`; several can be on). A "Remote only" toggle. Counts follow the search and the remote filter, not the status filter.
+- Status filter chips with counts: All, New, Untriaged, Shortlisted, Applied, Interview, Offer, Rejected (toggle buttons with `aria-pressed`; several can be on). A "Remote only" toggle. Counts follow the search and the remote filter, not the status filter. Skipped is not a chip because skipped rows are not in this list.
+- New is not a status. A job is New when `first_seen_at` is at or after `started_at` of the latest scrape run. The page reads the run start from `GET /api/scrape/status`. The New chip filters the list. A badge labelled `NEW` in uppercase appears in the status cell of each New row.
+- `status = ""` is Untriaged. It means no status has been chosen. An old job can be Untriaged. A New job can also be Untriaged.
+- The table shows no status chip for an untriaged row. Most rows are untriaged, so the repeated chip is noise. The cell keeps the word Untriaged for screen readers only. A row with a real status keeps its chip, and the drawer still shows the Untriaged chip.
 - Search (labelled) matches title, company and location. Every word must match. The counter reads "{n} of {total} jobs".
-- New rows have "Shortlist" and "Skip". A skipped job stays in the list with its chip. Each change shows the undo toast.
+- Untriaged rows have "Shortlist" and "Skip". A skipped job leaves this list and moves to Archived. Each change shows the undo toast.
 - The table has a "Last seen" column. A job with no sighting for more than 14 days gets a "Stale" badge. A job with `closed_at` gets a "Closed" badge instead.
-- A facet bar has five selects: Country, City, Work mode, Seniority and Employment type. "Clear facets" resets them. The status counts respect the facet filters. The options come from the loaded rows.
-- The detail drawer is a modal dialog: `role="dialog"`, `aria-modal`, labelled by the job title. Focus moves into it and returns to the row on close. Tab stays inside. Escape, the close button and a backdrop click close it. It has Shortlist, Skip and the status menu. It shows Last seen, and Closed with the reason when the job is closed.
+- The table has a "Salary" column between Last seen and Actions. It shows the currency and the range the board gave, for example `AUD 100,000 – 150,000 / yearly`, and a dash when the row has no salary. On mobile cards the cell keeps its "Salary:" label.
+- "Last seen" and "Salary" are sortable. Both start with the largest or newest first. Last seen compares the stored timestamp. Salary compares the top of the range: `max_amount` when present, else `min_amount`. The raw numbers are compared with no currency conversion, so a mixed-currency list groups by amount, not by value. Rows with no sighting or no salary stay last in both directions. When two rows share a Last seen value, the newer posted date comes first in both directions.
+- A facet bar has five checkbox filters: Country, City, Work mode, Seniority and Employment type. Several values in one filter combine with OR, and different filters combine with AND. "Clear facets" resets all five. The status counts respect the facet filters. The options come from the loaded rows.
+- A filter with five options or fewer shows plain checkboxes. A filter with more than five options also shows All and Clear. The button shows "All", one label, or "{n} selected".
+- The city options use the selected countries. When the user selects a country, the city menu contains only cities in that country. A selected city that no longer matches the countries is removed. The country menu does not use the selected cities, so a city filter never hides a country the user wants to add.
+- The detail drawer is a modal dialog: `role="dialog"`, `aria-modal`, labelled by the job title. Focus moves into it and returns to the row on close. Tab stays inside. Escape, the close button and a backdrop click close it. It has Shortlist, Skip and the status menu. It shows First seen with the number of days since that sighting, Last seen, and Closed with the reason when the job is closed.
+- Posting evidence stays factual. When the board date is more than one day later than the first sighting, the drawer adds "Board date: Later than the first sighting". The app shows the observation, not a verdict about the employer.
 - The drawer has a short "Resume fit" summary (`web/app/jobs/_components/resume-fit.tsx`): the best resume tag, its keyword score and a link "Open resume review". A job without a description shows a note. A profile without resumes links to the Resume page.
 - The review page `/jobs/[jobId]/review` shows one resume beside its fit report. A tag select picks the resume (default: the best keyword match). The left side shows the original file (a PDF in the browser viewer, other types as text). The right side is `web/app/jobs/_components/fit-report.tsx`: keyword score with matched and missing words, then the Claude analysis, then the "Submitted with this resume" checkbox.
-- "Analyse fit" asks for a confirm step that shows the size, then calls the Claude API (`web/lib/analysis.ts`). The key is `ANTHROPIC_API_KEY` and the model is `claude-haiku-5-5` unless `ANTHROPIC_MODEL` is set. The request sends the job text and the whole resume text, including contact details. The result has a score (an alignment hint, not a hiring prediction), a summary, strengths, a requirements table (requirement, evidence, verdict `strong`, `partial`, `weak` or `missing`, reasoning), gaps with fix ideas, and suggested wording (original line and better line, each with a Copy button). The app never edits a resume.
-- A saved result lives in `data/{profile}/analysis/{jobId}--{tag}.json` with the resume version, the resume text hash and the job description hash. When the resume text or the job text changes, the page marks the saved result "out of date". Re-run replaces it. Renaming a resume moves its results, and deleting a resume deletes them. Without the key the page shows a notice and no button.
+- "Analyse fit" asks for a confirm step that shows the size, then calls `web/lib/analysis.ts`. Two providers are supported. With `ANTHROPIC_API_KEY` the app calls the Claude Messages API; the model is `claude-haiku-5-5` unless `ANTHROPIC_MODEL` is set. With `LLM_BASE_URL` set, the app calls an OpenAI-compatible `chat/completions` endpoint such as llama.cpp; the model is `LLM_MODEL`, the default is `local-model`, and `LLM_API_KEY` is optional. A local endpoint wins when both are set. The request sends the job text and the whole resume text, including contact details. The result has a score (an alignment hint, not a hiring prediction), a summary, strengths, a requirements table (requirement, evidence, verdict `strong`, `partial`, `weak` or `missing`, reasoning), gaps with fix ideas, and suggested wording (original line and better line, each with a Copy button). The app never edits a resume.
+- A saved result lives in `data/{profile}/analysis/{jobId}--{tag}.json` with the resume version, the resume text hash and the job description hash. When the resume text or the job text changes, the page marks the saved result "out of date". Re-run replaces it. Renaming a resume moves its results, and deleting a resume deletes them. Without a provider the page shows a notice and no button.
 - The "Submitted with this resume" checkbox records the tag, the resume version and the text hash in `data/{profile}/submitted.json`. The page warns when the resume text changed after the submission.
 - Pure view logic lives in `web/lib/jobs-view.ts` (`sortJobs`, `filterJobs`, `statusCounts`).
 
 ### Applications
 
-**Function:** Monitor and manage jobs with a non-empty status.
+**Function:** Monitor and manage jobs with a tracked status. Untriaged and skipped rows are not shown.
 
-- Shows only rows where `status` is non-empty. The header shows "{n} active applications, {m} archived" (active and archived as defined in the status pipeline).
+- Shows only rows where `status` is tracked (`isTrackedStatus`: not empty and not skipped). The header shows "{n} active applications, {m} rejected".
 - Views: Kanban, Table, Gantt. The toggle buttons use `aria-pressed`. The last view is kept in `localStorage` key `applications_view`.
-- Every card and table row has a status menu with all statuses plus "Back to new". The current status is marked. Cards also have one primary button for the usual next step (Mark applied, Move to interview, Got offer). No confirmation dialogs. Each change shows the undo toast.
+- Every card and table row has a status menu with all statuses plus "Back to untriaged". The current status is marked. Cards also have one primary button for the usual next step (Mark applied, Move to interview, Got offer). No confirmation dialogs. Each change shows the undo toast.
 - Gantt: one row per job (title and company at the left), week ticks on the time axis, bars in the status colours. Each bar has a `title` and an accessible name such as "Applied, 12 Sep to 18 Sep". Rows sort by most recent activity. The chart scrolls inside its own container. Data comes from `GET /api/jobs/log` and `GET /api/jobs`, built by `buildGanttRows` in `web/lib/gantt.ts`. A log entry with an earlier time than the entries before it (an undo) removes the undone segments. A job with no log gets one segment from its `status_updated_at`.
+
+### Archived
+
+**Function:** Show skipped jobs and let the user restore one.
+
+- Reads all rows in `jobs.csv` via `GET /api/jobs` and keeps rows where `status` is `skipped`.
+- The table shows Title, Company, Location and Skipped date. Rows sort by the most recent skip first.
+- The "Restore" button sets the status back to `""` (Untriaged). The job leaves Archived and returns to Jobs. Each change shows the undo toast.
+- The page states that skipped jobs do not appear on Jobs or Applications.
+- The status lives in `jobs.csv`. There is no separate archive file and no database.
 
 ### Statistics
 
@@ -328,7 +355,7 @@ The Python engine writes both files next to `jobs.csv`.
 | `GET` | `/api/jobs/[jobId]` | One row with its `description` (empty string when none). 404 unknown job |
 | `GET` | `/api/jobs/[jobId]/match` | `{ hasDescription, ranking }`. Ranking is a list of `{ tag, score, matched, missing }`, best first. Empty when the job has no description or there are no tags |
 | `GET` | `/api/jobs/[jobId]/analysis?tag=` | `{ available, sendChars, saved, stale }`. 400 bad tag, 404 unknown job or tag |
-| `POST` | `/api/jobs/[jobId]/analysis` | Body `{ tag }`. Runs and saves the gap analysis. 400 bad tag, 404 unknown job or tag, 422 no description, 503 no `ANTHROPIC_API_KEY`, 502 API failure. Returns `{ model, created_at, tag, resume_version, resume_hash, job_hash, analysis }` |
+| `POST` | `/api/jobs/[jobId]/analysis` | Body `{ tag }`. Runs and saves the gap analysis. 400 bad tag, 404 unknown job or tag, 422 no description, 503 with neither `ANTHROPIC_API_KEY` nor `LLM_BASE_URL`, 502 API failure. Returns `{ model, created_at, tag, resume_version, resume_hash, job_hash, analysis }` |
 | `PATCH` | `/api/jobs/[jobId]` | Body `{ status, status_updated_at? }`. Any status to any status, including `""`. `status_updated_at` is optional: an ISO 8601 date and time, or `""` (undo of a new job); absent means now; invalid gives 422. Unknown status gives 422, unknown job 404, no profile 400. Keeps other columns and row order. Appends one line to `status_log.jsonl`. Returns the updated row. |
 | `GET` | `/api/jobs/log` | Read `status_log.jsonl` for the active profile; returns a list of `{ job_id, from, to, at }` |
 | `GET` | `/api/scrape/status` | Read `scrape_status.json` |
@@ -352,12 +379,35 @@ The Python engine writes both files next to `jobs.csv`.
 ## Scrape Trigger Flow
 
 1. User clicks "Run scrape" on the Scrape page.
-2. `POST /api/scrape/run` resets `scrape.log`, writes `scrape_status.json` with `status: running`, then spawns `uv run python main.py` with args from `scrape_config.json` plus `--save_path data/{profile}/jobs.csv`. All multi-value args (`--job`, `--location`, `--site_name`, etc.) are passed as a single flag with space-separated values so argparse `nargs='+'` collects them all. `PYTHONUNBUFFERED=1` is set so Python flushes output line-by-line. stdout and stderr are redirected to `scrape.log` via a file descriptor (not piped through Node) so logging works with `detached: true`.
+2. `POST /api/scrape/run` resets `scrape.log`, writes `scrape_status.json` with `status: running`, then spawns the scrape. On Windows, when `.venv/Scripts/pythonw.exe` exists, the runner starts that binary with `main.py`; otherwise it starts `uv run python main.py`. `pythonw` is a GUI subsystem binary, so Windows cannot open a console window for it. All multi-value args (`--job`, `--location`, `--site_name`, etc.) are passed as a single flag with space-separated values so argparse `nargs='+'` collects them all. `PYTHONUNBUFFERED=1` is set so Python flushes output line-by-line. stdout and stderr are redirected to `scrape.log` via a file descriptor (not piped through Node) so logging works with `detached: true`. The spawn keeps `windowsHide: true` as a second guard.
 3. Python subprocess runs. The engine calls one site at a time, records each site's result, writes `scrape_run.json` and updates `source_health.json`. The web server reads `scrape_run.json` after the child exits and writes `status: done` (or `error` when every attempted site failed).
 4. Frontend polls `GET /api/scrape/status` every 5 seconds. Updates progress indicator. A collapsible log panel polls `GET /api/scrape/log` every 3 seconds while running.
 5. On `done`: frontend shows diff summary. Polling stops.
 
 Concurrent runs against the same profile are blocked — "Run scrape" button is disabled while `scrape_status.json` reports `running`.
+
+---
+
+## Direct Company Boards
+
+A company board is fetched straight from the employer's ATS, so the row has a source-native id and a live description, with no aggregator in between.
+
+- CLI form: `--company provider:board[:Company Name]`. Providers are `greenhouse`, `lever` and `ashby`. The name defaults to the board slug with spaces and title case, so `acme-corp` becomes "Acme Corp".
+- Greenhouse calls the public board API with `content=true`, then maps title, company, location, `absolute_url`, `first_published` (fallback `updated_at`, date part only), HTML-stripped content, id, site and the Employment Type metadata.
+- Lever calls `https://api.lever.co/v0/postings/{board}?mode=json`, then maps `text`, `categories.location`, `hostedUrl`, `createdAt` (epoch milliseconds, UTC date), plain description (fallback HTML-stripped `description`), id, site, `workplaceType`, the commitment, and `salaryRange` (`min`, `max`, `currency`, interval). Lever intervals map `per-year-salary` to `yearly`, `per-month-salary` to `monthly` and `per-hour-wage` to `hourly`.
+- Ashby calls `https://api.ashbyhq.com/posting-api/job-board/{board}?includeCompensation=true`, then maps `title`, `location`, `jobUrl` (fallback `applyUrl`), `publishedAt` (date part), plain description (fallback HTML-stripped `descriptionHtml`), id, site, `isRemote` and `workplaceType`, `employmentType`, and the first Salary component in `compensation.compensationTiers`. The interval token `YEAR`, `MONTH`, `WEEK`, `DAY` or `HOUR` maps to the JobSpy interval. An entry with `isListed: false` is skipped.
+- A board is fetched once per run, not once per search term, so it can return more jobs than the search would.
+- A failed board is recorded in `scrape_run.json` under `provider:board` and does not stop the other sources.
+- The Scrape page has a Company boards field. It writes the same entries to `scrape_config.json`, and the web runner passes them as `--company`. An ATS crawlers group ticks Greenhouse, Lever, Ashby and Workday; all are ticked by default and only ticked providers are crawled.
+
+---
+
+## Agent Surface
+
+Two read-only entry points serve agents. Both read `jobs.csv` and never write.
+
+- `jobs_query.py` filters the saved jobs. It takes text, status, city, country, site, work mode, seniority and employment type. Skipped rows are hidden unless `--include-archived` is set or the status filter asks for them. Rows sort by board date, newest first, with undated rows last. `--json` prints the rows; the default prints a table.
+- `mcp_server.py` is a small MCP server over stdio with no new dependency. It exposes one tool, `search_jobs`, with the same filters, and returns the rows as JSON text. Start it with `--save_path <jobs.csv>`.
 
 ---
 
@@ -367,7 +417,7 @@ Concurrent runs against the same profile are blocked — "Run scrape" button is 
 
 **Toast with undo** — `web/components/toast.tsx` (`ToastProvider`, `useToast`). Message, optional action button, close button, auto-dismiss after 8 s, inside an `aria-live="polite"` region. A new toast replaces the current one. Status changes use `useChangeStatus` (`web/components/use-change-status.ts`): it saves the previous `status` and `status_updated_at`, sends the PATCH, shows "Moved {title} to {status}." with Undo. Undo sends the previous values back.
 
-**Status menu** — `web/components/status-menu.tsx`. A menu button with `role="menu"` and `menuitemradio` items: all statuses plus "Back to new". Arrow keys, Home, End and Escape work. Focus returns to the button.
+**Status menu** — `web/components/status-menu.tsx`. A menu button with `role="menu"` and `menuitemradio` items: all statuses plus "Back to untriaged". Arrow keys, Home, End and Escape work. Focus returns to the button.
 
 **Focus ring** — 2 px solid accent colour with a 2 px offset on `:focus-visible` (inset inside clipping containers).
 
@@ -377,9 +427,9 @@ Concurrent runs against the same profile are blocked — "Run scrape" button is 
 
 **Dialogs** — no `window.confirm`. Destructive actions use inline confirmation in the same row: click → "Label? / Yes / Cancel".
 
-**Sidebar** — 180 px above 768 px width, sentence case. Nav order: Profile, Resume, Scrape, Jobs, Applications, Statistics. Active profile chip inline on the Profile row (right-aligned); no footer chip.
+**Sidebar** — 180 px above 768 px width, sentence case. Nav order: Profile, Scrape, Jobs, Resume, Applications, Archived, Statistics. Active profile chip inline on the Profile row (right-aligned); no footer chip.
 
-**Scrape config** — multi-line fields are `<textarea>` (10 rows, no resize). Auto-saved debounced 600 ms; flushed immediately on blur. Glassdoor shown but blocked with a tooltip badge.
+**Scrape config** — multi-line fields are `<textarea>` (10 rows, no resize). Auto-saved debounced 600 ms; flushed immediately on blur. Google Jobs appears last, disabled, and reads "Google Jobs (unavailable)" with no badge. Glassdoor starts ticked.
 
 **Scrape log** — collapsible `<details>` spoiler on the Scrape page, below the status banner. Loads last log on mount. Polls every 3 s while a run is active; does a final fetch on completion. Auto-scrolls to the bottom as lines arrive.
 

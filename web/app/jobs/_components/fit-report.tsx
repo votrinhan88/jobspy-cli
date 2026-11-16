@@ -153,7 +153,7 @@ export function FitReport({ jobId, tag }: { jobId: string; tag: string }) {
         {confirmTag === tag ? (
           <div className="fit-confirm">
             <p className="fit-words">
-              Send resume and job text to Claude? About {data.sendChars} characters.
+              Send resume and job text to the model? About {data.sendChars} characters.
             </p>
             <div className="fit-actions">
               <button type="button" className="btn btn-primary btn-sm" onClick={() => runAnalysis(tag)}>

@@ -1,8 +1,8 @@
 # jobspy-cli
 
-jobspy-cli scrapes job postings from multiple boards (LinkedIn, Indeed, ZipRecruiter, Google Jobs) with [JobSpy](https://github.com/speedyapply/JobSpy). It has a Python command-line tool and a local web app. Use the web app to run scrapes, review jobs and track your applications. Ideal for analyzing job trends or automating job searches.
+jobspy-cli scrapes job postings from multiple boards (LinkedIn, Indeed, ZipRecruiter, Glassdoor) with [JobSpy](https://github.com/speedyapply/JobSpy). It has a Python command-line tool and a local web app. Use the web app to run scrapes, review jobs and track your applications. Ideal for analyzing job trends or automating job searches.
 
-> **Note:** Glassdoor is disabled — it returns HTTP 400 errors due to an unresolved upstream issue ([JobSpy#270](https://github.com/speedyapply/JobSpy/issues/270)).
+> **Note:** Google Jobs is unavailable — Google shows job results only to browsers that run JavaScript ([JobSpy#284](https://github.com/speedyapply/JobSpy/issues/284)). Glassdoor works, but Cloudflare can still block a run.
 
 ## Features
 - Scrapes job postings using [JobSpy](https://github.com/speedyapply/JobSpy)
@@ -52,10 +52,38 @@ uv run python ./main.py --help
 uv run python ./main.py --job "Data Scientist" --location "Australia"
 # Multiple jobs and locations
 uv run python ./main.py --job "Data Scientist" "ML Engineer" --location "Australia" "Vietnam" --results_wanted 10 --verbose 1
+# Also crawl company boards directly (Greenhouse, Lever)
+uv run python ./main.py --job "AI Engineer" --location "Australia" --company greenhouse:gitlab:GitLab lever:acme:Acme Corporation ashby:ramp:Ramp
 # Load job keywords from file
 uv run python ./main.py --job "./keywords.txt" --location "Australia" "Vietnam" --save_path ./jobs_by_keywords.csv --results_wanted 10 --verbose 1
 ```
 Results are saved to `./jobs.csv` by default, including fields such as title, company, location, date posted, salary, job URL, and more.
+
+`--company` takes one or more entries in the form `provider:board[:Company Name]`. Greenhouse, Lever and Ashby are the current providers. A board is fetched once, so it can add jobs the search terms would not find; a failed board does not stop the other sources.
+
+### Query and agent access
+
+Read the saved jobs without another scrape:
+
+```bash
+# Text table, newest first
+uv run python ./jobs_query.py --save_path data/myprofile/jobs.csv --query "engineer"
+# JSON for a script or an agent
+uv run python ./jobs_query.py --save_path data/myprofile/jobs.csv --status applied --json
+```
+
+The same filters are available as one MCP tool. Add this to your MCP host:
+
+```json
+{
+  "mcpServers": {
+    "jobspy-jobs": {
+      "command": "uv",
+      "args": ["run", "python", "mcp_server.py", "--save_path", "data/myprofile/jobs.csv"]
+    }
+  }
+}
+```
 
 ### Web app
 Start the app from the `web/` folder:

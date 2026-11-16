@@ -60,3 +60,33 @@ describe("facetOptions", () => {
     expect(facetOptions(jobs, "work_mode")).toEqual(["hybrid", "onsite", "remote"]);
   });
 });
+
+describe("facetOptions with a selection", () => {
+  const jobs = [
+    j({ country: "Australia", city: "Sydney", work_mode: "remote" }),
+    j({ country: "Australia", city: "Melbourne", work_mode: "hybrid" }),
+    j({ country: "Vietnam", city: "Hanoi", work_mode: "onsite" }),
+  ];
+
+  it("narrows city options to the selected countries", () => {
+    expect(facetOptions(jobs, "city", { country: ["Vietnam"] })).toEqual(["Hanoi"]);
+  });
+
+  it("narrows country options to the selected cities", () => {
+    expect(facetOptions(jobs, "country", { city: ["Melbourne"] })).toEqual(["Australia"]);
+  });
+
+  it("ignores the facet's own selection", () => {
+    expect(facetOptions(jobs, "country", { country: ["Vietnam"] })).toEqual(["Australia", "Vietnam"]);
+  });
+
+  it("uses every other facet as context", () => {
+    expect(facetOptions(jobs, "city", { country: ["Australia"], work_mode: ["hybrid"] })).toEqual([
+      "Melbourne",
+    ]);
+  });
+
+  it("returns no options when no job matches the other facets", () => {
+    expect(facetOptions(jobs, "city", { country: ["Vietnam"], work_mode: ["remote"] })).toEqual([]);
+  });
+});

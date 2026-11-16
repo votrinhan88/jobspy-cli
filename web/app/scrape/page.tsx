@@ -72,12 +72,19 @@ function RunHistory() {
   );
 }
 
-const SITES: { id: string; label: string; blocked?: string }[] = [
+const PROVIDERS: { id: string; label: string }[] = [
+  { id: "greenhouse", label: "Greenhouse" },
+  { id: "lever",      label: "Lever" },
+  { id: "ashby",      label: "Ashby" },
+  { id: "workday",    label: "Workday" },
+];
+
+const SITES: { id: string; label: string; unavailable?: boolean }[] = [
   { id: "linkedin",      label: "LinkedIn" },
   { id: "indeed",        label: "Indeed" },
-  { id: "google",        label: "Google Jobs", blocked: "Blocked upstream — Google shows job results only to browsers (speedyapply/JobSpy#284)" },
   { id: "zip_recruiter", label: "ZipRecruiter" },
-  { id: "glassdoor",     label: "Glassdoor", blocked: "Blocked upstream — HTTP 400 from JobSpy (speedyapply/JobSpy#270)" },
+  { id: "glassdoor",     label: "Glassdoor" },
+  { id: "google",        label: "Google Jobs (unavailable)", unavailable: true },
 ];
 
 function LinesInput({
@@ -127,8 +134,7 @@ function StatusBanner({ status }: { status: ScrapeStatus | null }) {
   if (status.status === "done") {
     return (
       <div className="status-banner status-banner--done">
-        <strong>Done.</strong> {status.new_jobs ?? 0} new &middot;{" "}
-        {status.updated_jobs ?? 0} updated &middot; {status.total_jobs ?? 0} total
+        <strong>Done.</strong> {status.new_jobs ?? 0} new &middot; {status.total_jobs ?? 0} total
         {status.finished_at && (
           <span className="status-ts">
             {" "}&mdash; finished {new Date(status.finished_at).toLocaleTimeString()}
@@ -346,7 +352,6 @@ export default function ScrapePage() {
       started_at: null,
       finished_at: null,
       new_jobs: null,
-      updated_jobs: null,
       total_jobs: null,
       error: null,
       pid: null,
@@ -461,15 +466,14 @@ export default function ScrapePage() {
             {SITES.map((site) => (
               <label
                 key={site.id}
-                className={`checkbox-label${site.blocked ? " checkbox-label--blocked" : ""}`}
-                title={site.blocked}
+                className={`checkbox-label${site.unavailable ? " checkbox-label--unavailable" : ""}`}
               >
                 <input
                   type="checkbox"
                   checked={config.site_name.includes(site.id)}
-                  disabled={!!site.blocked}
+                  disabled={!!site.unavailable}
                   onChange={(e) => {
-                    if (site.blocked) return;
+                    if (site.unavailable) return;
                     const next = e.target.checked
                       ? [...config.site_name, site.id]
                       : config.site_name.filter((s) => s !== site.id);
@@ -477,7 +481,6 @@ export default function ScrapePage() {
                   }}
                 />
                 {site.label}
-                {site.blocked && <span className="blocked-badge">blocked</span>}
               </label>
             ))}
           </div>
@@ -501,6 +504,34 @@ export default function ScrapePage() {
           onChange={(v) => updateConfig({ exclude_companies: v })}
           onFlush={flushConfig}
           placeholder={"Acme Corp\nRecruitment Agency"}
+        />
+        <div className="form-field form-field--full">
+          <label className="form-label">ATS crawlers</label>
+          <div className="checkbox-group">
+            {PROVIDERS.map((provider) => (
+              <label key={provider.id} className="checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={config.providers.includes(provider.id)}
+                  onChange={(e) => {
+                    const next = e.target.checked
+                      ? [...config.providers, provider.id]
+                      : config.providers.filter((p) => p !== provider.id);
+                    updateConfig({ providers: next });
+                  }}
+                />
+                {provider.label}
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <LinesInput
+          label="Company boards"
+          values={config.companies}
+          onChange={(v) => updateConfig({ companies: v })}
+          onFlush={flushConfig}
+          placeholder={"greenhouse:gitlab:GitLab\nlever:acme:Acme\nashby:ramp:Ramp\nworkday:nvidia.wd5/NVIDIAExternalCareerSite:NVIDIA"}
         />
       </div>
 
