@@ -22,62 +22,77 @@ async function parse(content: string): Promise<Record<string, string>[]> {
 }
 
 function job(fields: Record<string, string>): Job {
-  return fields as unknown as Job;
+  return {
+    ...fields,
+    company: fields.company ?? "Acme",
+    location: fields.location ?? "Sydney, Australia",
+  } as unknown as Job;
 }
 
 describe("readJobs", () => {
   it("parses a header and simple rows", async () => {
-    expect(await parse("a,b\n1,2\n3,4")).toEqual([
-      { a: "1", b: "2" },
-      { a: "3", b: "4" },
+    expect(await parse("job_id,title,company,location\n1,2,3,4\n5,6,7,8")).toEqual([
+      { job_id: "1", title: "2", company: "3", location: "4" },
+      { job_id: "5", title: "6", company: "7", location: "8" },
     ]);
   });
 
   it("returns an empty list for a header-only file", async () => {
-    expect(await parse("a,b\n")).toEqual([]);
-    expect(await parse("a,b")).toEqual([]);
+    expect(await parse("job_id,title,company,location\n")).toEqual([]);
+    expect(await parse("job_id,title,company,location")).toEqual([]);
   });
 
   it("parses a quoted field that contains a comma", async () => {
-    expect(await parse('a,b\n"Hanoi, Vietnam",2\n')).toEqual([{ a: "Hanoi, Vietnam", b: "2" }]);
+    expect(await parse('job_id,title,company,location\n1,"Hanoi, Vietnam",Acme,Sydney\n')).toEqual([
+      { job_id: "1", title: "Hanoi, Vietnam", company: "Acme", location: "Sydney" },
+    ]);
   });
 
   it("parses a quoted field that contains a newline as one row", async () => {
-    expect(await parse('a,b\n"line 1\nline 2",x\n3,y\n')).toEqual([
-      { a: "line 1\nline 2", b: "x" },
-      { a: "3", b: "y" },
+    expect(await parse('job_id,title,company,location\n"line 1\nline 2",x,Acme,Sydney\n3,y,Beta,Melbourne\n')).toEqual([
+      { job_id: "line 1\nline 2", title: "x", company: "Acme", location: "Sydney" },
+      { job_id: "3", title: "y", company: "Beta", location: "Melbourne" },
     ]);
   });
 
   it("parses a quoted field that contains CRLF as one row", async () => {
-    expect(await parse('a,b\r\n"line 1\r\nline 2",x\r\n3,y\r\n')).toEqual([
-      { a: "line 1\r\nline 2", b: "x" },
-      { a: "3", b: "y" },
+    expect(await parse('job_id,title,company,location\r\n"line 1\r\nline 2",x,Acme,Sydney\r\n3,y,Beta,Melbourne\r\n')).toEqual([
+      { job_id: "line 1\r\nline 2", title: "x", company: "Acme", location: "Sydney" },
+      { job_id: "3", title: "y", company: "Beta", location: "Melbourne" },
     ]);
   });
 
   it("parses escaped quotes", async () => {
-    expect(await parse('a,b\n"say ""hi""",""""\n')).toEqual([{ a: 'say "hi"', b: '"' }]);
+    expect(await parse('job_id,title,company,location\n"say ""hi""",""""\n')).toEqual([
+      { job_id: 'say "hi"', title: '"', company: "", location: "" },
+    ]);
   });
 
   it("handles CRLF row ends, a trailing newline and a blank last line", async () => {
-    expect(await parse("a,b\r\n1,2\r\n3,4\r\n\r\n")).toEqual([
-      { a: "1", b: "2" },
-      { a: "3", b: "4" },
+    expect(await parse("job_id,title,company,location\r\n1,2,3,4\r\n5,6,7,8\r\n\r\n")).toEqual([
+      { job_id: "1", title: "2", company: "3", location: "4" },
+      { job_id: "5", title: "6", company: "7", location: "8" },
     ]);
-    expect(await parse("a,b\n1,2\n\n")).toEqual([{ a: "1", b: "2" }]);
+    expect(await parse("job_id,title,company,location\n1,2,3,4\n\n")).toEqual([
+      { job_id: "1", title: "2", company: "3", location: "4" },
+    ]);
   });
 
   it("pads short rows with empty strings", async () => {
-    expect(await parse("a,b,c\n1\n2,3\n")).toEqual([
-      { a: "1", b: "", c: "" },
-      { a: "2", b: "3", c: "" },
+    expect(await parse("job_id,title,company,location\n1\n2,3\n")).toEqual([
+      { job_id: "1", title: "", company: "", location: "" },
+      { job_id: "2", title: "3", company: "", location: "" },
     ]);
   });
 
+  it("rejects a file that has no job_id column", async () => {
+    await fs.writeFile(file, "title,company,location\nEngineer,Acme,Sydney\n", "utf-8");
+    await expect(readJobs(file)).rejects.toThrow(/job_id/);
+  });
+
   it("strips a leading byte-order mark", async () => {
-    const rows = await parse("﻿job_id,title\nx-1,Engineer\n");
-    expect(rows).toEqual([{ job_id: "x-1", title: "Engineer" }]);
+    const rows = await parse("﻿job_id,title,company,location\nx-1,Engineer,Acme,Sydney\n");
+    expect(rows).toEqual([{ job_id: "x-1", title: "Engineer", company: "Acme", location: "Sydney" }]);
   });
 
   it("reads a file written by pandas that has a multi-line field (fixture in tests/fixtures/)", async () => {
@@ -104,10 +119,10 @@ describe("writeJobs", () => {
   it("keeps the union of columns when later rows have extra keys", async () => {
     await writeJobs(file, [job({ job_id: "a", title: "t" }), job({ job_id: "b", extra: "e", title: "u" })]);
     const content = await fs.readFile(file, "utf-8");
-    expect(content.split(/\r?\n/)[0]).toBe("job_id,title,extra");
+    expect(content.split(/\r?\n/)[0]).toBe("job_id,title,company,location,extra");
     expect(await readJobs(file)).toEqual([
-      { job_id: "a", title: "t", extra: "" },
-      { job_id: "b", title: "u", extra: "e" },
+      { job_id: "a", title: "t", company: "Acme", location: "Sydney, Australia", extra: "" },
+      { job_id: "b", title: "u", company: "Acme", location: "Sydney, Australia", extra: "e" },
     ]);
   });
 

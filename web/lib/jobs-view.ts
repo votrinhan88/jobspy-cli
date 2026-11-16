@@ -8,6 +8,11 @@ export interface JobFilters {
   query: string;
   statuses: Set<JobStatus>;
   remoteOnly: boolean;
+  country?: string;
+  city?: string;
+  workMode?: string;
+  seniority?: string;
+  employmentType?: string;
 }
 
 export type StatusCounts = Record<JobStatus | "all", number>;
@@ -147,13 +152,32 @@ function queryWords(query: string): string[] {
   return query.trim().toLowerCase().split(/\s+/).filter(Boolean);
 }
 
-function applyQueryAndRemote(jobs: Job[], filters: Pick<JobFilters, "query" | "remoteOnly">): Job[] {
+function matchesFacets(job: Job, filters: Partial<JobFilters>): boolean {
+  const pairs: [string | undefined, string][] = [
+    [filters.country, job.country],
+    [filters.city, job.city],
+    [filters.workMode, job.work_mode],
+    [filters.seniority, job.seniority],
+    [filters.employmentType, job.employment_type],
+  ];
+  return pairs.every(([wanted, value]) => {
+    const text = (wanted ?? "").trim();
+    return text === "" || (value ?? "").trim() === text;
+  });
+}
+
+function applyBaseFilters(
+  jobs: Job[],
+  filters: Pick<JobFilters, "query" | "remoteOnly"> & Partial<JobFilters>
+): Job[] {
   const words = queryWords(filters.query);
-  return jobs.filter((job) => (!filters.remoteOnly || isRemote(job.is_remote)) && matchesQuery(job, words));
+  return jobs
+    .filter((job) => (!filters.remoteOnly || isRemote(job.is_remote)) && matchesQuery(job, words))
+    .filter((job) => matchesFacets(job, filters));
 }
 
 export function filterJobs(jobs: Job[], filters: JobFilters): Job[] {
-  const narrowed = applyQueryAndRemote(jobs, filters);
+  const narrowed = applyBaseFilters(jobs, filters);
   if (filters.statuses.size === 0) return narrowed;
   return narrowed.filter((job) => filters.statuses.has((job.status ?? "") as JobStatus));
 }
@@ -164,7 +188,7 @@ export function statusCounts(
 ): StatusCounts {
   const counts = { all: 0 } as StatusCounts;
   for (const s of STATUSES) counts[s] = 0;
-  for (const job of applyQueryAndRemote(jobs, filters)) {
+  for (const job of applyBaseFilters(jobs, filters)) {
     counts.all++;
     const s = (job.status ?? "") as JobStatus;
     if (s in counts) counts[s]++;

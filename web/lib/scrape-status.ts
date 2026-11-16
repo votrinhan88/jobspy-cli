@@ -3,6 +3,17 @@ import { scrapeStatusPath, scrapeHistoryPath } from "./profile";
 
 export type ScrapeStatusValue = "idle" | "running" | "done" | "error";
 
+export interface SourceRunStatus {
+  site: string;
+  attempts: number;
+  succeeded: number;
+  failed: number;
+  skipped: number;
+  jobs: number;
+  duration_ms: number;
+  error: string | null;
+}
+
 export interface ScrapeStatus {
   status: ScrapeStatusValue;
   started_at: string | null;
@@ -12,6 +23,7 @@ export interface ScrapeStatus {
   total_jobs: number | null;
   error: string | null;
   pid: number | null;
+  source_runs: SourceRunStatus[];
 }
 
 const IDLE: ScrapeStatus = {
@@ -23,12 +35,18 @@ const IDLE: ScrapeStatus = {
   total_jobs: null,
   error: null,
   pid: null,
+  source_runs: [],
 };
 
 export async function readScrapeStatus(profile: string): Promise<ScrapeStatus> {
   try {
     const raw = await fs.readFile(scrapeStatusPath(profile), "utf-8");
-    return { ...IDLE, ...JSON.parse(raw) };
+    const data = JSON.parse(raw);
+    return {
+      ...IDLE,
+      ...data,
+      source_runs: data && Array.isArray(data.source_runs) ? data.source_runs : [],
+    };
   } catch {
     return { ...IDLE };
   }

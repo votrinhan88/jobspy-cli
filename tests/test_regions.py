@@ -95,6 +95,34 @@ class TestGeocodeOne:
         assert self.lookup(geo, None)[0] == ("raw place", "raw place")
         assert self.lookup(geo, RuntimeError("timeout"))[0] == ("raw place", "raw place")
 
+    def test_strips_metropolitan_area_before_the_lookup(self, geo):
+        from threading import Lock
+
+        fake = FakeNominatim({"Ho Chi Minh City, Vietnam": None})
+        geo._geocode_one("Ho Chi Minh City Metropolitan Area", fake, Lock(), country_hint="Vietnam")
+        assert fake.calls[0][0] == "Ho Chi Minh City, Vietnam"
+
+    def test_strips_capital_region_before_the_lookup(self, geo):
+        from threading import Lock
+
+        fake = FakeNominatim({"Hanoi, Vietnam": None})
+        geo._geocode_one("Hanoi Capital Region", fake, Lock(), country_hint="Vietnam")
+        assert fake.calls[0][0] == "Hanoi, Vietnam"
+
+    def test_adds_the_country_hint_to_a_location_without_a_country(self, geo):
+        from threading import Lock
+
+        fake = FakeNominatim({"Hanoi, Vietnam": None})
+        geo._geocode_one("Hanoi", fake, Lock(), country_hint="Vietnam")
+        assert fake.calls[0][0] == "Hanoi, Vietnam"
+
+    def test_does_not_repeat_a_country_hint_already_in_the_location(self, geo):
+        from threading import Lock
+
+        fake = FakeNominatim({"Sydney, Australia": None})
+        geo._geocode_one("Sydney, Australia", fake, Lock(), country_hint="Australia")
+        assert fake.calls[0][0] == "Sydney, Australia"
+
 
 class TestRegionOne:
     def lookup(self, geo, answer):
@@ -142,6 +170,14 @@ class TestRegionOne:
     def test_returns_none_when_the_lookup_fails(self, geo):
         assert self.lookup(geo, RuntimeError("timeout"))[0][1] is None
 
+    def test_strips_a_suffix_from_the_region_query(self, geo):
+        from threading import Lock
+
+        fake = FakeNominatim({"Ho Chi Minh City": found({"state": "Ho Chi Minh"})})
+        loc, region = geo._region_one("Ho Chi Minh City Metropolitan Area", fake, Lock())
+        assert fake.calls[0][0] == "Ho Chi Minh City"
+        assert (loc, region) == ("Ho Chi Minh City Metropolitan Area", "Ho Chi Minh")
+
 
 class TestRegionMap:
     def patch_nominatim(self, monkeypatch, answers, calls=None):
@@ -179,11 +215,30 @@ class TestRegionMap:
         assert len(calls) == 2
 
 
+def make_location_frame(locations):
+    return pd.DataFrame({"location": locations})
+
+
+class TestLocationMapCountryHint:
+    def patch_nominatim(self, monkeypatch, answers, calls=None):
+        fake = FakeNominatim(answers, calls)
+        monkeypatch.setattr(geocoder_module, "Nominatim", lambda **kwargs: fake)
+        return fake
+
+    def test_uses_the_country_hint_for_a_location_without_a_country(self, geo, monkeypatch):
+        answer = found({"city": "Hà Nội", "country": "Việt Nam"})
+        self.patch_nominatim(monkeypatch, {"Hanoi, Vietnam": answer})
+        result = geo.get_location_map(make_location_frame(["Hanoi Capital Region"]), country_hint="Vietnam")
+        assert result["Hanoi Capital Region"] == "Hà Nội, Việt Nam"
+
+
 def jobs(**columns):
     base = {
         "title": ["AI Engineer", "ML Engineer", "Analyst"],
+        "company": ["Acme", "Beta", "Gamma"],
         "location": ["Sydney, Australia", "Melbourne, Australia", ""],
         "job_url": ["u1", "u2", "u3"],
+        "job_id": ["job-1", "job-2", "job-3"],
     }
     base.update(columns)
     return pd.DataFrame(base)
@@ -237,7 +292,7 @@ class TestBackfillRegions:
         assert list(out["region"]) == ["New South Wales", "Victoria", ""]
         assert list(out["status"]) == ["", "applied", ""]
         assert list(out["location"]) == ["Sydney, Australia", "Melbourne, Australia", ""]
-        assert path.read_text("utf-8").splitlines()[1].startswith('"AI Engineer"')
+        assert '"AI Engineer"' in path.read_text("utf-8").splitlines()[1]
 
     def test_returns_zero_for_a_missing_or_empty_file(self, scraper, tmp_path):
         assert scraper.backfill_regions(str(tmp_path / "missing.csv")) == 0
@@ -250,6 +305,35 @@ class TestBackfillRegions:
         jobs().to_csv(path, index=False)
         scraper.backfill_regions(str(path))
         assert scraper.backfill_regions(str(path)) == 0
+
+
+class TestSearchCountryHint:
+    def run_scrape(self, scraper, mocker, tmp_path, location):
+        mocker.patch.object(scraper, "_scrape_pair", return_value=jobs().iloc[:2])
+        merge = mocker.patch.object(scraper, "merge", return_value=jobs().iloc[:2])
+        scraper(save_path=str(tmp_path / "jobs.csv"), job="x", location=location, site_name=["linkedin"])
+        return merge
+
+    def test_a_single_search_country_is_passed_as_a_hint(self, scraper, mocker, tmp_path):
+        merge = self.run_scrape(scraper, mocker, tmp_path, "Vietnam")
+        assert merge.call_args.kwargs["country_hint"] == "Vietnam"
+
+    def test_the_country_is_the_last_part_of_a_city_search(self, scraper, mocker, tmp_path):
+        merge = self.run_scrape(scraper, mocker, tmp_path, "Ho Chi Minh City, Vietnam")
+        assert merge.call_args.kwargs["country_hint"] == "Vietnam"
+
+    def test_two_locations_in_one_country_still_give_the_hint(self, scraper, mocker, tmp_path):
+        merge = self.run_scrape(scraper, mocker, tmp_path, ["Sydney, Australia", "Melbourne, Australia"])
+        assert merge.call_args.kwargs["country_hint"] == "Australia"
+
+    def test_two_search_countries_give_no_hint(self, scraper, mocker, tmp_path):
+        merge = self.run_scrape(scraper, mocker, tmp_path, ["Australia", "Vietnam"])
+        assert merge.call_args.kwargs["country_hint"] is None
+
+    def test_merge_passes_the_hint_to_the_location_map(self, scraper, mocker):
+        mocker.patch.object(scraper, "get_location_map", return_value={"Sydney, Australia": "Sydney, Australia"})
+        scraper.merge([jobs()], country_hint="Vietnam")
+        assert scraper.get_location_map.call_args.kwargs == {"country_hint": "Vietnam"}
 
 
 class TestScrapeFillsRegions:

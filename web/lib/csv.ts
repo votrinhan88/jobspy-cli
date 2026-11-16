@@ -1,5 +1,6 @@
 import fs from "fs/promises";
 import path from "path";
+import { assertJobHeader } from "./jobs-schema";
 
 export type JobStatus =
   | "shortlisted"
@@ -24,6 +25,15 @@ export interface Job {
   job_url: string;
   status: JobStatus;
   status_updated_at: string;
+  first_seen_at: string;
+  last_seen_at: string;
+  closed_at: string;
+  closed_reason: string;
+  country: string;
+  city: string;
+  work_mode: string;
+  seniority: string;
+  employment_type: string;
   [key: string]: string;
 }
 
@@ -98,6 +108,7 @@ export async function readJobs(csvPath: string): Promise<Job[]> {
 
   const [headers, ...records] = parseCsv(content);
   if (!headers) return [];
+  assertJobHeader(headers);
   return records.map((values) => {
     const obj: Record<string, string> = {};
     headers.forEach((h, i) => {

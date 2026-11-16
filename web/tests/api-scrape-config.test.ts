@@ -12,7 +12,10 @@ const { getActiveProfile, readConfig, writeConfig, registerSchedule, isValidSche
 );
 
 vi.mock("@/lib/profile", () => ({ getActiveProfile }));
-vi.mock("@/lib/config", () => ({ readConfig, writeConfig }));
+vi.mock("@/lib/config", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/config")>();
+  return { ...actual, readConfig, writeConfig };
+});
 vi.mock("@/lib/scheduler", () => ({ registerSchedule, isValidSchedule }));
 
 import { PUT } from "@/app/api/scrape/config/route";
@@ -76,5 +79,23 @@ describe("PUT /api/scrape/config schedule handling", () => {
     const res = await PUT(put({ schedule: null }));
     expect(res.status).toBe(400);
     expect(registerSchedule).not.toHaveBeenCalled();
+  });
+});
+
+describe("PUT /api/scrape/config validation", () => {
+  it("rejects a bad field and saves nothing", async () => {
+    const res = await PUT(put({ job: ["dev"], results_wanted: "many", schedule: null }));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(/results_wanted/);
+    expect(writeConfig).not.toHaveBeenCalled();
+  });
+
+  it("saves the cleaned config", async () => {
+    const res = await PUT(put({ job: ["dev"], site_name: ["linkedin", "google", "glassdoor"], schedule: null }));
+    expect(res.status).toBe(200);
+    expect(writeConfig).toHaveBeenCalledWith(
+      "alice",
+      expect.objectContaining({ site_name: ["linkedin"] })
+    );
   });
 });

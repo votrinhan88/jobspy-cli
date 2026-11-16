@@ -261,6 +261,69 @@ describe("formatLocation", () => {
   });
 });
 
+describe("filterJobs facets", () => {
+  const jobs = [
+    j("1", {
+      country: "Australia",
+      city: "Sydney",
+      work_mode: "remote",
+      seniority: "senior",
+      employment_type: "full_time",
+    }),
+    j("2", {
+      country: "Australia",
+      city: "Melbourne",
+      work_mode: "hybrid",
+      seniority: "senior",
+      employment_type: "contract",
+    }),
+    j("3", {
+      country: "Vietnam",
+      city: "Hanoi",
+      work_mode: "onsite",
+      seniority: "junior",
+      employment_type: "full_time",
+    }),
+  ];
+
+  it("filters by country and city", () => {
+    expect(ids(filterJobs(jobs, { ...none, country: "Australia" }))).toEqual(["1", "2"]);
+    expect(ids(filterJobs(jobs, { ...none, city: "Hanoi" }))).toEqual(["3"]);
+  });
+
+  it("filters by work mode, seniority and employment type", () => {
+    expect(ids(filterJobs(jobs, { ...none, workMode: "remote" }))).toEqual(["1"]);
+    expect(ids(filterJobs(jobs, { ...none, seniority: "senior" }))).toEqual(["1", "2"]);
+    expect(ids(filterJobs(jobs, { ...none, employmentType: "full_time" }))).toEqual(["1", "3"]);
+  });
+
+  it("combines facet filters", () => {
+    expect(
+      ids(filterJobs(jobs, { ...none, country: "Australia", workMode: "hybrid", seniority: "senior" }))
+    ).toEqual(["2"]);
+  });
+
+  it("an empty facet value does not filter", () => {
+    expect(
+      ids(
+        filterJobs(jobs, {
+          ...none,
+          country: "",
+          city: "",
+          workMode: "",
+          seniority: "",
+          employmentType: "",
+        })
+      )
+    ).toEqual(["1", "2", "3"]);
+  });
+
+  it("status counts respect the facet filters", () => {
+    const counts = statusCounts(jobs, { ...none, country: "Australia" });
+    expect(counts.all).toBe(2);
+  });
+});
+
 describe("filterJobs query and region", () => {
   it("matches the region too", () => {
     const jobs = [j("a", { location: "Melbourne, Australia", region: "Victoria" }), j("b", { location: "Perth, Australia" })];

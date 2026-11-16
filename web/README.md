@@ -38,6 +38,6 @@ Profile, Resume, Scrape, Jobs, Applications (Kanban, Table and Gantt views) and 
 
 ## More information
 
-- Spec, data model and API routes: [`../.claude/SPEC.md`](../.claude/SPEC.md)
-- Design decisions: [`../.claude/DESIGN-DECISIONS.md`](../.claude/DESIGN-DECISIONS.md)
+- Spec, data model and API routes: [`../.agents/SPEC.md`](../.agents/SPEC.md)
+- Design decisions: [`../.agents/DESIGN-DECISIONS.md`](../.agents/DESIGN-DECISIONS.md)
 - This version of Next.js has breaking changes. Read [`AGENTS.md`](AGENTS.md) before you use a Next.js API you do not know.

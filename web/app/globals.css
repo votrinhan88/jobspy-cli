@@ -586,6 +586,11 @@ nextjs-portal {
   transition: border-color 0.12s;
 }
 
+.input::placeholder {
+  color: var(--app-ink-muted);
+  opacity: 0.4;
+}
+
 .input:focus {
   border-color: var(--app-accent);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-accent) 12%, transparent);
@@ -705,6 +710,29 @@ nextjs-portal {
 .count-badge {
   font-size: 12px;
   color: var(--app-ink-muted);
+}
+
+.lifecycle-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+  vertical-align: middle;
+}
+
+.lifecycle-badge--stale {
+  color: var(--app-error-text);
+  background: var(--app-error-bg);
+  border: 1px solid color-mix(in srgb, var(--app-error-text) 25%, transparent);
+}
+
+.lifecycle-badge--closed {
+  color: var(--app-ink-muted);
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
 }
 
 .saving-indicator {
@@ -2223,6 +2251,39 @@ button.job-link {
   font-weight: 600;
 }
 
+.facet-bar {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: -8px 0 16px;
+}
+
+.facet-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.facet-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--app-ink-muted);
+}
+
+.facet-select {
+  max-width: 180px;
+  padding: 5px 8px;
+  font-size: 12px;
+}
+
+.facet-bar .filter-chip:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
 .jobs-table th[aria-sort] {
   padding: 0;
 }
@@ -2384,6 +2445,15 @@ th[aria-sort="descending"] .sort-btn {
 
   .input--sm {
     max-width: 120px;
+  }
+
+  .facet-field {
+    flex: 1 1 140px;
+  }
+
+  .facet-select {
+    width: 100%;
+    max-width: 100%;
   }
 
   .create-form,

@@ -2,11 +2,19 @@
 import json
 import os
 import tempfile
+from datetime import datetime, timedelta, timezone
+from urllib.error import HTTPError, URLError
 
 import pandas as pd
 import pytest
 
-from scraper import JobScraper
+from scraper import (
+    JobScraper,
+    SourceRunRecorder,
+    probe_job_url,
+    source_in_cooldown,
+    update_source_health,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -561,6 +569,41 @@ class TestJobId:
         assert id1 != id2
 
 
+class TestFacetsAfterAddMetadata:
+    def test_add_metadata_adds_the_facet_columns(self, scraper):
+        df = make_df(
+            description=["This is a hybrid role."],
+            job_level=["Senior"],
+            job_type=["fulltime"],
+        )
+        result = scraper._add_metadata(df)
+        assert result.loc[0, "country"] == "Australia"
+        assert result.loc[0, "city"] == "Sydney"
+        assert result.loc[0, "work_mode"] == "hybrid"
+        assert result.loc[0, "seniority"] == "senior"
+        assert result.loc[0, "employment_type"] == "full_time"
+
+
+class TestBackfillFacets:
+    def test_adds_the_facet_columns_and_values(self, scraper, tmp_path):
+        save_path = str(tmp_path / "jobs.csv")
+        df = make_df(
+            description=["This is a hybrid role."],
+            job_level=["Senior"],
+            job_type=["fulltime"],
+            job_id=["acme-ai-engineer-aabbccdd"],
+        )
+        df.to_csv(save_path, index=False)
+        filled = scraper.backfill_facets(save_path)
+        out = pd.read_csv(save_path, keep_default_na=False)
+        assert filled == 1
+        assert out.loc[0, "country"] == "Australia"
+        assert out.loc[0, "city"] == "Sydney"
+        assert out.loc[0, "work_mode"] == "hybrid"
+        assert out.loc[0, "seniority"] == "senior"
+        assert out.loc[0, "employment_type"] == "full_time"
+
+
 class TestStatusColumns:
     def test_status_column_present(self, scraper):
         df = make_df()
@@ -696,3 +739,628 @@ class TestUpsertFutureWarning:
             warnings.simplefilter("error", FutureWarning)
             result = scraper._upsert(new, str(path), overwrite=False)
         assert len(result) == 2
+
+
+# ---------------------------------------------------------------------------
+# Source isolation, run report and source health
+# ---------------------------------------------------------------------------
+
+class TestSourceIsolation:
+    def test_each_site_is_requested_separately(self, scraper, mocker):
+        spy = mocker.patch("scraper.scrape_jobs", return_value=make_df())
+        mocker.patch.object(scraper, "clean_job_list", side_effect=lambda df: df)
+
+        scraper._scrape_pair(
+            "AI Engineer", "Australia", ["linkedin", "indeed"], 5,
+            recorder=SourceRunRecorder(),
+        )
+
+        requested = [call.kwargs["site_name"] for call in spy.call_args_list]
+        assert requested == [["linkedin"], ["indeed"]]
+
+    def test_one_site_failure_keeps_the_other_site(self, scraper, mocker):
+        def fake_scrape(**kwargs):
+            if kwargs["site_name"] == ["linkedin"]:
+                raise RuntimeError("blocked")
+            return make_df()
+
+        mocker.patch("scraper.scrape_jobs", side_effect=fake_scrape)
+        mocker.patch.object(scraper, "clean_job_list", side_effect=lambda df: df)
+        recorder = SourceRunRecorder()
+
+        result = scraper._scrape_pair(
+            "AI Engineer", "Australia", ["linkedin", "indeed"], 5,
+            recorder=recorder,
+        )
+
+        assert len(result) == 1
+        runs = {run["site"]: run for run in recorder.snapshot()}
+        assert runs["linkedin"]["failed"] == 1
+        assert runs["linkedin"]["succeeded"] == 0
+        assert runs["indeed"]["failed"] == 0
+        assert runs["indeed"]["succeeded"] == 1
+        assert runs["indeed"]["jobs"] == 1
+
+    def test_all_sites_failing_returns_an_empty_frame(self, scraper, mocker):
+        mocker.patch("scraper.scrape_jobs", side_effect=RuntimeError("blocked"))
+        mocker.patch.object(scraper, "clean_job_list", side_effect=lambda df: df)
+
+        result = scraper._scrape_pair(
+            "AI Engineer", "Australia", ["linkedin", "indeed"], 5,
+            recorder=SourceRunRecorder(),
+        )
+
+        assert result.empty
+
+
+class TestSourceRunReport:
+    def _run(self, scraper, mocker, save_path, site_side_effect, existing=None):
+        if existing is not None:
+            existing.to_csv(save_path, index=False)
+        mocker.patch("scraper.scrape_jobs", side_effect=site_side_effect)
+        mocker.patch.object(scraper, "get_location_map", return_value={
+            "Sydney, Australia": "Sydney, Australia",
+        })
+        mocker.patch.object(scraper, "fill_regions", side_effect=lambda df: df)
+        return scraper(
+            save_path=str(save_path),
+            job="AI Engineer",
+            location="Australia",
+            site_name=["linkedin", "indeed"],
+            results_wanted=5,
+        )
+
+    def test_run_writes_a_source_report(self, scraper, mocker, tmp_path):
+        def fake_scrape(**kwargs):
+            if kwargs["site_name"] == ["linkedin"]:
+                raise RuntimeError("blocked")
+            return make_df()
+
+        self._run(scraper, mocker, tmp_path / "jobs.csv", fake_scrape)
+
+        report = json.loads((tmp_path / "scrape_run.json").read_text())
+        runs = {run["site"]: run for run in report["sources"]}
+        assert runs["linkedin"]["failed"] == 1
+        assert runs["linkedin"]["error"] == "blocked"
+        assert runs["indeed"]["succeeded"] == 1
+        assert runs["indeed"]["jobs"] == 1
+        assert report["new_jobs"] == 1
+        assert report["total_jobs"] == 1
+
+    def test_report_counts_new_jobs_against_the_existing_csv(self, scraper, mocker, tmp_path):
+        existing = make_df()
+        new_rows = pd.concat(
+            [make_df(), make_df(title=["ML Engineer"], job_url=["https://example.com/job/2"])],
+            ignore_index=True,
+        )
+
+        self._run(
+            scraper, mocker, tmp_path / "jobs.csv",
+            lambda **kwargs: new_rows,
+            existing=existing,
+        )
+
+        report = json.loads((tmp_path / "scrape_run.json").read_text())
+        assert report["new_jobs"] == 1
+        assert report["total_jobs"] == 2
+
+    def test_report_counts_only_canonical_rows(self, scraper, mocker, tmp_path):
+        rows = pd.concat([
+            make_df(site=["linkedin"], id=["li-1"]),
+            make_df(
+                site=["indeed"],
+                id=["in-1"],
+                job_url=["https://example.com/job/2"],
+            ),
+        ], ignore_index=True)
+
+        self._run(scraper, mocker, tmp_path / "jobs.csv", lambda **kwargs: rows)
+
+        report = json.loads((tmp_path / "scrape_run.json").read_text())
+        assert report["new_jobs"] == 1
+        assert report["total_jobs"] == 1
+
+    def test_cooled_source_is_skipped(self, scraper, mocker, tmp_path):
+        save_path = tmp_path / "jobs.csv"
+        now = datetime.now(timezone.utc)
+        (tmp_path / "source_health.json").write_text(json.dumps({
+            "linkedin": {
+                "consecutive_failures": 3,
+                "cooldown_until": (now + timedelta(hours=1)).isoformat(),
+            },
+        }))
+        spy = mocker.patch("scraper.scrape_jobs", return_value=make_df())
+        mocker.patch.object(scraper, "fill_regions", side_effect=lambda df: df)
+
+        scraper(
+            save_path=str(save_path),
+            job="AI Engineer",
+            location="Australia",
+            site_name=["linkedin"],
+            results_wanted=5,
+        )
+
+        spy.assert_not_called()
+        report = json.loads((tmp_path / "scrape_run.json").read_text())
+        assert report["sources"][0]["site"] == "linkedin"
+        assert report["sources"][0]["skipped"] == 1
+        assert report["sources"][0]["attempts"] == 0
+
+
+class TestSourceHealth:
+    def _failure(self):
+        return {
+            "site": "linkedin",
+            "attempts": 1,
+            "succeeded": 0,
+            "failed": 1,
+            "skipped": 0,
+            "jobs": 0,
+            "duration_ms": 10,
+            "error": "blocked",
+        }
+
+    def test_three_failed_runs_set_a_cooldown(self):
+        now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        health = {}
+        for _ in range(3):
+            health = update_source_health(health, [self._failure()], now)
+
+        entry = health["linkedin"]
+        assert entry["consecutive_failures"] == 3
+        assert entry["last_error"] == "blocked"
+        assert source_in_cooldown(entry, now) is True
+
+    def test_a_success_resets_the_failure_count_and_cooldown(self):
+        now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        health = {}
+        for _ in range(3):
+            health = update_source_health(health, [self._failure()], now)
+
+        health = update_source_health(health, [{
+            "site": "linkedin",
+            "attempts": 1,
+            "succeeded": 1,
+            "failed": 0,
+            "skipped": 0,
+            "jobs": 4,
+            "duration_ms": 10,
+            "error": None,
+        }], now)
+
+        entry = health["linkedin"]
+        assert entry["consecutive_failures"] == 0
+        assert entry["cooldown_until"] is None
+        assert source_in_cooldown(entry, now) is False
+
+    def test_a_skipped_source_keeps_its_health(self):
+        now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        health = {"linkedin": {"consecutive_failures": 2, "cooldown_until": None}}
+
+        updated = update_source_health(health, [{
+            "site": "linkedin",
+            "attempts": 0,
+            "succeeded": 0,
+            "failed": 0,
+            "skipped": 1,
+            "jobs": 0,
+            "duration_ms": 0,
+            "error": None,
+        }], now)
+
+        assert updated["linkedin"]["consecutive_failures"] == 2
+
+
+# ---------------------------------------------------------------------------
+# Identity, role keys and deduplication
+# ---------------------------------------------------------------------------
+
+class TestNormalizeUrl:
+    def test_strips_scheme_query_fragment_and_trailing_slash(self, scraper):
+        assert scraper._normalize_url("https://www.Example.com/job/1/?utm=1#apply") == "example.com/job/1"
+
+    def test_treats_http_and_https_as_the_same_url(self, scraper):
+        assert scraper._normalize_url("http://example.com/job/1") == scraper._normalize_url(
+            "https://example.com/job/1"
+        )
+
+    def test_empty_value_has_no_url_key(self, scraper):
+        assert scraper._normalize_url(None) == ""
+        assert scraper._normalize_url("   ") == ""
+
+
+class TestRoleKey:
+    def test_add_metadata_adds_role_key_and_duplicate_marker(self, scraper):
+        result = scraper._add_metadata(make_df())
+        assert result["role_key"].iloc[0] != ""
+        assert result["duplicate_of"].iloc[0] == ""
+
+    def test_role_key_ignores_case_and_punctuation(self, scraper):
+        first = scraper._add_metadata(make_df(title=["AI Engineer"], company=["Acme"]))
+        second = scraper._add_metadata(make_df(title=["ai-engineer"], company=["ACME."]))
+        assert first["role_key"].iloc[0] == second["role_key"].iloc[0]
+
+    def test_role_key_does_not_depend_on_the_description(self, scraper):
+        first = scraper._add_metadata(make_df(description=["Build models."]))
+        second = scraper._add_metadata(make_df(description=["A different description."]))
+        assert first["role_key"].iloc[0] == second["role_key"].iloc[0]
+
+    def test_role_key_differs_for_different_titles(self, scraper):
+        first = scraper._add_metadata(make_df(title=["AI Engineer"]))
+        second = scraper._add_metadata(make_df(title=["ML Engineer"]))
+        assert first["role_key"].iloc[0] != second["role_key"].iloc[0]
+
+    def test_role_key_differs_for_different_companies(self, scraper):
+        first = scraper._add_metadata(make_df(company=["Acme"]))
+        second = scraper._add_metadata(make_df(company=["Beta"]))
+        assert first["role_key"].iloc[0] != second["role_key"].iloc[0]
+
+
+class TestMergeIdentity:
+    def test_same_site_and_id_merges_when_the_url_changes(self, scraper, mocker):
+        mocker.patch.object(scraper, "get_location_map", return_value={"Sydney, Australia": "Sydney, Australia"})
+        first = make_df(site=["linkedin"], id=["li-1"])
+        second = make_df(
+            site=["linkedin"],
+            id=["li-1"],
+            job_url=["https://example.com/job/1?ref=feed"],
+            description=["New description"],
+            max_amount=[200000],
+        )
+
+        result = scraper.merge([first, second])
+
+        assert len(result) == 1
+        assert result["job_url"].iloc[0] == "https://example.com/job/1"
+        assert result["description"].iloc[0] == "New description"
+        assert result["max_amount"].iloc[0] == 200000
+
+    def test_normalized_url_merges_query_and_trailing_slash_variants(self, scraper, mocker):
+        mocker.patch.object(scraper, "get_location_map", return_value={"Sydney, Australia": "Sydney, Australia"})
+        first = make_df(job_url=["https://www.example.com/job/1/?utm_source=feed"])
+        second = make_df(job_url=["http://example.com/job/1"])
+        second["max_amount"] = 200000
+
+        result = scraper.merge([first, second])
+
+        assert len(result) == 1
+        assert result["max_amount"].iloc[0] == 200000
+
+    def test_same_role_and_location_marks_a_duplicate_and_merges_fields(self, scraper, mocker):
+        mocker.patch.object(scraper, "get_location_map", return_value={"Sydney, Australia": "Sydney, Australia"})
+        first = make_df(
+            site=["linkedin"],
+            id=["li-1"],
+            description=["Short."],
+            max_amount=[None],
+            date_posted=["2026-08-28"],
+        )
+        second = make_df(
+            site=["indeed"],
+            id=["in-1"],
+            job_url=["https://example.com/job/2"],
+            description=["A much longer description."],
+            max_amount=[200000],
+            date_posted=["2026-08-27"],
+        )
+
+        result = scraper.merge([first, second])
+
+        assert len(result) == 2
+        canonical = result[result["duplicate_of"] == ""].iloc[0]
+        duplicate = result[result["duplicate_of"] != ""].iloc[0]
+        assert canonical["description"] == "A much longer description."
+        assert canonical["max_amount"] == 200000
+        assert canonical["date_posted"] == "2026-08-27"
+        assert duplicate["duplicate_of"] == canonical["job_id"]
+        assert duplicate["job_id"] != canonical["job_id"]
+
+    def test_different_locations_are_not_marked_as_duplicates(self, scraper, mocker):
+        mocker.patch.object(scraper, "get_location_map", return_value={
+            "Sydney, Australia": "Sydney, Australia",
+            "Melbourne, Australia": "Melbourne, Australia",
+        })
+        first = make_df(site=["linkedin"], id=["li-1"])
+        second = make_df(
+            site=["linkedin"],
+            id=["li-2"],
+            location=["Melbourne, Australia"],
+            job_url=["https://example.com/job/2"],
+        )
+
+        result = scraper.merge([first, second])
+
+        assert len(result) == 2
+        assert list(result["duplicate_of"]) == ["", ""]
+
+    def test_exact_duplicates_are_dropped_not_marked(self, scraper, mocker):
+        mocker.patch.object(scraper, "get_location_map", return_value={"Sydney, Australia": "Sydney, Australia"})
+        result = scraper.merge([make_df(), make_df()])
+        assert len(result) == 1
+        assert result["duplicate_of"].iloc[0] == ""
+
+
+class TestUpsertIdentity:
+    def _call(self, scraper, existing, new, save_path):
+        existing.to_csv(save_path, index=False)
+        return scraper._upsert(new, save_path, overwrite=False)
+
+    def test_site_and_id_match_when_the_url_changes(self, scraper, tmp_path):
+        save_path = str(tmp_path / "jobs.csv")
+        existing = make_df(site=["linkedin"], id=["li-1"], job_url=["https://example.com/job/1"])
+        existing["job_id"] = "acme-ai-engineer-aabbccdd"
+        new = make_df(
+            site=["linkedin"],
+            id=["li-1"],
+            job_url=["https://example.com/job/1?ref=feed"],
+            max_amount=[200000],
+        )
+        new["job_id"] = "acme-ai-engineer-ffffffff"
+
+        result = self._call(scraper, existing, new, save_path)
+
+        assert len(result) == 1
+        assert result["job_url"].iloc[0] == "https://example.com/job/1"
+        assert result["job_id"].iloc[0] == "acme-ai-engineer-aabbccdd"
+        assert result["max_amount"].iloc[0] == 200000
+
+    def test_normalized_url_match_when_the_query_changes(self, scraper, tmp_path):
+        save_path = str(tmp_path / "jobs.csv")
+        existing = make_df(job_url=["https://www.example.com/job/1/?utm_source=feed"])
+        new = make_df(job_url=["http://example.com/job/1"], max_amount=[200000])
+
+        result = self._call(scraper, existing, new, save_path)
+
+        assert len(result) == 1
+        assert result["max_amount"].iloc[0] == 200000
+
+    def test_same_role_and_location_adds_a_marked_repost(self, scraper, tmp_path):
+        save_path = str(tmp_path / "jobs.csv")
+        existing = scraper._add_metadata(make_df(site=["linkedin"], id=["li-1"]))
+        existing["job_id"] = "acme-ai-engineer-aabbccdd"
+        new = scraper._add_metadata(make_df(
+            site=["indeed"],
+            id=["in-1"],
+            job_url=["https://example.com/job/2"],
+            max_amount=[200000],
+        ))
+
+        result = self._call(scraper, existing, new, save_path)
+
+        assert len(result) == 2
+        canonical = result[result["duplicate_of"] == ""].iloc[0]
+        duplicate = result[result["duplicate_of"] != ""].iloc[0]
+        assert canonical["job_id"] == "acme-ai-engineer-aabbccdd"
+        assert canonical["max_amount"] == 200000
+        assert duplicate["duplicate_of"] == "acme-ai-engineer-aabbccdd"
+
+    def test_existing_rows_get_a_role_key_during_upsert(self, scraper, tmp_path):
+        save_path = str(tmp_path / "jobs.csv")
+        existing = make_df(site=["linkedin"], id=["li-1"])
+        new = scraper._add_metadata(make_df(
+            site=["indeed"],
+            id=["in-1"],
+            job_url=["https://example.com/job/2"],
+        ))
+
+        result = self._call(scraper, existing, new, save_path)
+
+        assert len(result) == 2
+        assert result["role_key"].str.len().gt(0).all()
+        assert result["role_key"].nunique() == 1
+        assert result[result["duplicate_of"] != ""].shape[0] == 1
+
+    def test_same_role_in_another_location_is_not_a_repost(self, scraper, tmp_path):
+        save_path = str(tmp_path / "jobs.csv")
+        existing = scraper._add_metadata(make_df(site=["linkedin"], id=["li-1"]))
+        new = scraper._add_metadata(make_df(
+            site=["linkedin"],
+            id=["li-2"],
+            location=["Melbourne, Australia"],
+            job_url=["https://example.com/job/2"],
+        ))
+
+        result = self._call(scraper, existing, new, save_path)
+
+        assert len(result) == 2
+        assert list(result["duplicate_of"]) == ["", ""]
+
+    def test_a_role_match_preserves_status_and_location_on_the_canonical_row(self, scraper, tmp_path):
+        save_path = str(tmp_path / "jobs.csv")
+        existing = scraper._add_metadata(make_df(site=["linkedin"], id=["li-1"]))
+        existing["job_id"] = "acme-ai-engineer-aabbccdd"
+        existing["status"] = "applied"
+        existing["location"] = "Sydney, NSW"
+        new = scraper._add_metadata(make_df(
+            site=["indeed"],
+            id=["in-1"],
+            job_url=["https://example.com/job/2"],
+            location=["Sydney NSW"],
+        ))
+
+        result = self._call(scraper, existing, new, save_path)
+
+        canonical = result[result["duplicate_of"] == ""].iloc[0]
+        assert canonical["status"] == "applied"
+        assert canonical["location"] == "Sydney, NSW"
+
+
+class TestCanonicalCount:
+    def test_count_canonical_rows_ignores_marked_duplicates(self, scraper, tmp_path):
+        path = tmp_path / "jobs.csv"
+        df = pd.concat([
+            make_df(site=["linkedin"], id=["li-1"], job_url=["https://example.com/job/1"]),
+            make_df(site=["indeed"], id=["in-1"], job_url=["https://example.com/job/2"]),
+        ], ignore_index=True)
+        df["duplicate_of"] = ["", "acme-ai-engineer-aabbccdd"]
+        df.to_csv(path, index=False)
+
+        assert scraper._count_canonical_rows(str(path)) == 1
+
+
+# ---------------------------------------------------------------------------
+# Lifecycle
+# ---------------------------------------------------------------------------
+
+class TestLifecycle:
+    NOW = datetime(2026, 9, 15, 12, 0, tzinfo=timezone.utc)
+    OLD = "2026-08-01T00:00:00Z"
+
+    def _existing(self, **overrides):
+        df = make_df()
+        df["first_seen_at"] = [self.OLD]
+        df["last_seen_at"] = [self.OLD]
+        df["closed_at"] = [""]
+        df["closed_reason"] = [""]
+        for key, value in overrides.items():
+            df[key] = value
+        return df
+
+    def test_new_rows_get_first_and_last_seen(self, scraper, tmp_path):
+        result = scraper._upsert(make_df(), str(tmp_path / "jobs.csv"), overwrite=False, now=self.NOW)
+
+        assert result["first_seen_at"].iloc[0] == "2026-09-15T12:00:00Z"
+        assert result["last_seen_at"].iloc[0] == "2026-09-15T12:00:00Z"
+
+    def test_seen_row_keeps_first_seen_and_updates_last_seen(self, scraper, tmp_path):
+        save_path = str(tmp_path / "jobs.csv")
+        existing = self._existing(
+            closed_at=["2026-08-10T00:00:00Z"],
+            closed_reason=["url_404"],
+        )
+        existing.to_csv(save_path, index=False)
+
+        result = scraper._upsert(make_df(max_amount=[200000]), save_path, overwrite=False, now=self.NOW)
+
+        assert result["first_seen_at"].iloc[0] == self.OLD
+        assert result["last_seen_at"].iloc[0] == "2026-09-15T12:00:00Z"
+        assert result["closed_at"].iloc[0] == ""
+        assert result["closed_reason"].iloc[0] == ""
+
+    def test_unseen_job_is_not_closed_by_upsert(self, scraper, tmp_path):
+        save_path = str(tmp_path / "jobs.csv")
+        existing = self._existing()
+        existing.to_csv(save_path, index=False)
+
+        result = scraper._upsert(make_df2(), save_path, overwrite=False, now=self.NOW)
+
+        old_row = result[result["job_url"] == "https://example.com/job/1"].iloc[0]
+        assert old_row["closed_at"] == ""
+
+    def test_a_scrape_closes_a_gone_job(self, scraper, mocker, tmp_path):
+        save_path = tmp_path / "jobs.csv"
+        self._existing().to_csv(save_path, index=False)
+        mocker.patch("scraper.scrape_jobs", return_value=make_df2())
+        mocker.patch.object(scraper, "get_location_map", return_value={
+            "Sydney, Australia": "Sydney, Australia",
+        })
+        mocker.patch.object(scraper, "fill_regions", side_effect=lambda df: df)
+        probe = mocker.patch("scraper.probe_job_url", return_value=404)
+
+        result = scraper(
+            save_path=str(save_path),
+            job="AI Engineer",
+            location="Australia",
+            site_name=["linkedin"],
+            results_wanted=5,
+        )
+
+        probe.assert_called_once_with("https://example.com/job/1")
+        old_row = result[result["job_url"] == "https://example.com/job/1"].iloc[0]
+        assert old_row["closed_reason"] == "url_404"
+        assert old_row["closed_at"] != ""
+
+    def test_probes_an_old_open_row_and_closes_it(self, scraper):
+        calls = []
+
+        result = scraper._close_gone_jobs(
+            self._existing(), now=self.NOW, probe=lambda url: calls.append(url) or 404
+        )
+
+        assert calls == ["https://example.com/job/1"]
+        assert result["closed_at"].iloc[0] == "2026-09-15T12:00:00Z"
+        assert result["closed_reason"].iloc[0] == "url_404"
+
+    def test_recent_rows_are_not_probed(self, scraper):
+        calls = []
+        recent = self._existing(last_seen_at=[_iso_for(self.NOW - timedelta(days=1))])
+
+        result = scraper._close_gone_jobs(
+            recent, now=self.NOW, probe=lambda url: calls.append(url) or 404
+        )
+
+        assert calls == []
+        assert result["closed_at"].iloc[0] == ""
+
+    def test_closed_rows_are_not_probed(self, scraper):
+        calls = []
+        closed = self._existing(closed_at=["2026-08-10T00:00:00Z"], closed_reason=["url_404"])
+
+        scraper._close_gone_jobs(closed, now=self.NOW, probe=lambda url: calls.append(url) or 404)
+
+        assert calls == []
+
+    def test_duplicate_rows_are_not_probed(self, scraper):
+        df = pd.concat([
+            make_df(site=["linkedin"], id=["li-1"]),
+            make_df(site=["indeed"], id=["in-1"], job_url=["https://example.com/job/2"]),
+        ], ignore_index=True)
+        df = scraper._add_metadata(df)
+        df["first_seen_at"] = [self.OLD, self.OLD]
+        df["last_seen_at"] = [self.OLD, self.OLD]
+        df["closed_at"] = ["", ""]
+        df["closed_reason"] = ["", ""]
+        df.loc[1, "duplicate_of"] = df.loc[0, "job_id"]
+        calls = []
+
+        scraper._close_gone_jobs(df, now=self.NOW, probe=lambda url: calls.append(url) or 404)
+
+        assert calls == ["https://example.com/job/1"]
+
+    @pytest.mark.parametrize("status,reason", [(404, "url_404"), (410, "url_410")])
+    def test_404_and_410_close_the_row(self, scraper, status, reason):
+        result = scraper._close_gone_jobs(
+            self._existing(), now=self.NOW, probe=lambda url: status
+        )
+
+        assert result["closed_reason"].iloc[0] == reason
+
+    @pytest.mark.parametrize("status", [403, 500, None])
+    def test_other_probe_results_do_not_close_the_row(self, scraper, status):
+        result = scraper._close_gone_jobs(
+            self._existing(), now=self.NOW, probe=lambda url: status
+        )
+
+        assert result["closed_at"].iloc[0] == ""
+        assert result["closed_reason"].iloc[0] == ""
+
+
+def _iso_for(value: datetime) -> str:
+    return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+class TestProbeJobUrl:
+    def test_returns_the_response_status(self, mocker):
+        response = mocker.MagicMock()
+        response.status = 200
+        response.__enter__.return_value = response
+        mocker.patch("scraper.urlopen", return_value=response)
+
+        assert probe_job_url("https://example.com/job/1") == 200
+
+    def test_returns_a_404_status_from_an_http_error(self, mocker):
+        error = HTTPError("https://example.com/job/1", 404, "Not Found", None, None)
+        mocker.patch("scraper.urlopen", side_effect=error)
+
+        assert probe_job_url("https://example.com/job/1") == 404
+
+    def test_returns_none_on_a_network_error(self, mocker):
+        mocker.patch("scraper.urlopen", side_effect=URLError("timed out"))
+
+        assert probe_job_url("https://example.com/job/1") is None
+
+    def test_empty_url_returns_none(self):
+        assert probe_job_url("") is None
+
+    def test_invalid_url_returns_none(self):
+        assert probe_job_url("http://[bad") is None

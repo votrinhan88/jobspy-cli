@@ -68,6 +68,10 @@ export function scrapeStatusPath(profile: string): string {
   return profilePath(profile, "scrape_status.json");
 }
 
+export function scrapeRunPath(profile: string): string {
+  return profilePath(profile, "scrape_run.json");
+}
+
 export function scrapeLogPath(profile: string): string {
   return profilePath(profile, "scrape.log");
 }

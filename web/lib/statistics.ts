@@ -1,4 +1,5 @@
 import type { Job, JobStatus } from "@/lib/csv";
+import { facetValueLabel, type FacetKey } from "@/lib/facets";
 import { STATUSES, isActiveStatus, isArchivedStatus, isRemote } from "@/lib/status";
 
 export const STATUS_ORDER: JobStatus[] = STATUSES.filter((s) => s !== "");
@@ -13,6 +14,14 @@ export interface TimelinePoint {
   count: number;
 }
 
+export interface FacetCounts {
+  countries: { name: string; count: number }[];
+  cities: { name: string; count: number }[];
+  workModes: { name: string; count: number }[];
+  seniorities: { name: string; count: number }[];
+  employmentTypes: { name: string; count: number }[];
+}
+
 export interface Statistics {
   total: number;
   active: number;
@@ -22,6 +31,7 @@ export interface Statistics {
   timeline: TimelinePoint[];
   topCompanies: { name: string; count: number }[];
   topLocations: { name: string; count: number }[];
+  facets: FacetCounts;
 }
 
 function weekKey(iso: string): string {
@@ -43,7 +53,7 @@ function weekLabel(iso: string): string {
 function topCounts(values: string[], limit: number): { name: string; count: number }[] {
   const map = new Map<string, number>();
   for (const value of values) {
-    const v = value.trim();
+    const v = (value ?? "").trim();
     if (!v) continue;
     map.set(v, (map.get(v) ?? 0) + 1);
   }
@@ -51,6 +61,13 @@ function topCounts(values: string[], limit: number): { name: string; count: numb
     .map(([name, count]) => ({ name, count }))
     .sort((a, b) => b.count - a.count)
     .slice(0, limit);
+}
+
+function topFacetCounts(jobs: Job[], key: FacetKey, limit: number): { name: string; count: number }[] {
+  return topCounts(
+    jobs.map((job) => facetValueLabel(key, job[key] ?? "")),
+    limit
+  );
 }
 
 export function computeStatistics(jobs: Job[]): Statistics {
@@ -82,5 +99,12 @@ export function computeStatistics(jobs: Job[]): Statistics {
     timeline,
     topCompanies: topCounts(jobs.map((j) => j.company), 6),
     topLocations: topCounts(jobs.map((j) => j.location), 6),
+    facets: {
+      countries: topCounts(jobs.map((j) => j.country), 6),
+      cities: topCounts(jobs.map((j) => j.city), 6),
+      workModes: topFacetCounts(jobs, "work_mode", 6),
+      seniorities: topFacetCounts(jobs, "seniority", 6),
+      employmentTypes: topFacetCounts(jobs, "employment_type", 6),
+    },
   };
 }

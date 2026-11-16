@@ -37,6 +37,38 @@ describe("computeStatistics", () => {
     expect(stats.active + stats.archived + fresh).toBe(stats.total);
   });
 
+  it("counts the five facets and uses display labels for work mode, seniority and employment type", () => {
+    const mixed = [
+      { country: "Australia", city: "Sydney", work_mode: "remote", seniority: "senior", employment_type: "full_time" },
+      { country: "Australia", city: "Sydney", work_mode: "remote", seniority: "senior", employment_type: "contract" },
+      { country: "Australia", city: "Melbourne", work_mode: "hybrid", seniority: "senior", employment_type: "full_time" },
+      { country: "Vietnam", city: "Hanoi", work_mode: "onsite", seniority: "junior", employment_type: "full_time" },
+    ] as Job[];
+    const stats = computeStatistics(mixed);
+    expect(stats.facets.countries).toEqual([
+      { name: "Australia", count: 3 },
+      { name: "Vietnam", count: 1 },
+    ]);
+    expect(stats.facets.cities).toEqual([
+      { name: "Sydney", count: 2 },
+      { name: "Melbourne", count: 1 },
+      { name: "Hanoi", count: 1 },
+    ]);
+    expect(stats.facets.workModes).toEqual([
+      { name: "Remote", count: 2 },
+      { name: "Hybrid", count: 1 },
+      { name: "On-site", count: 1 },
+    ]);
+    expect(stats.facets.seniorities).toEqual([
+      { name: "Senior", count: 3 },
+      { name: "Junior", count: 1 },
+    ]);
+    expect(stats.facets.employmentTypes).toEqual([
+      { name: "Full-time", count: 3 },
+      { name: "Contract", count: 1 },
+    ]);
+  });
+
   it("remote count uses the shared isRemote", () => {
     const mixed = [
       ...jobs([["", 1]], "True"),

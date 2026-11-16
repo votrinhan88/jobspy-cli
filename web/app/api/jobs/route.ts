@@ -8,6 +8,8 @@ export async function GET() {
   }
   const jobs = await readJobs(jobsCsvPath(profile));
   return Response.json(
-    jobs.map((job) => Object.fromEntries(Object.entries(job).filter(([key]) => key !== "description")))
+    jobs
+      .filter((job) => !(job.duplicate_of ?? "").trim())
+      .map((job) => Object.fromEntries(Object.entries(job).filter(([key]) => key !== "description")))
   );
 }

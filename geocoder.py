@@ -14,6 +14,8 @@ class Geocoder:
     _REGION_KEYS = ("state", "province", "region", "state_district", "county")
     # Most specific place first. A suburb is the last resort, because a city name gives a better group.
     _PLACE_KEYS = ("city", "town", "village", "municipality", "suburb", "hamlet")
+    # LinkedIn adds these words to a metro name, and Nominatim does not know them.
+    _LOCATION_SUFFIXES = (r"\s+metropolitan\s+area$", r"\s+capital\s+region$")
     _RATE_LIMIT = 1.0  # seconds between Nominatim requests (ToS: 1 req/sec)
     _MAX_WORKERS = 4
 
@@ -42,11 +44,29 @@ class Geocoder:
         with open(self.REGION_CACHE_PATH, "w", encoding="utf-8") as f:
             json.dump(cache, f, ensure_ascii=False, indent=2)
 
-    def _geocode_one(self, loc: str, geolocator: Nominatim, rate_lock: Lock) -> tuple[str, str]:
+    def _clean_location(self, loc: str) -> str:
         # Boards write "Remote, Vietnam". Nominatim would look for a place called "Remote".
         query = re.sub(r"^\s*remote\b[\s,\-]*", "", loc, flags=re.IGNORECASE).strip()
+        previous = None
+        while query != previous:
+            previous = query
+            for suffix in self._LOCATION_SUFFIXES:
+                query = re.sub(suffix, "", query, flags=re.IGNORECASE).strip(" ,")
+        return query
+
+    @staticmethod
+    def _with_country_hint(query: str, country_hint: str | None) -> str:
+        if not country_hint or country_hint.casefold() in query.casefold():
+            return query
+        return f"{query}, {country_hint}"
+
+    def _geocode_one(
+        self, loc: str, geolocator: Nominatim, rate_lock: Lock, country_hint: str | None = None
+    ) -> tuple[str, str]:
+        query = self._clean_location(loc)
         if not query:
             return loc, loc
+        query = self._with_country_hint(query, country_hint)
         try:
             with rate_lock:
                 geocoded = geolocator.geocode(query, addressdetails=True)
@@ -65,9 +85,10 @@ class Geocoder:
 
     def _region_one(self, loc: str, geolocator: Nominatim, rate_lock: Lock) -> tuple[str, str | None]:
         # None means the lookup failed, so the caller must not cache it. "" means the place has no region.
+        query = self._clean_location(loc) or loc
         try:
             with rate_lock:
-                geocoded = geolocator.geocode(loc, addressdetails=True)
+                geocoded = geolocator.geocode(query, addressdetails=True)
                 time.sleep(self._RATE_LIMIT)
         except Exception:
             return loc, None
@@ -104,7 +125,7 @@ class Geocoder:
             self._save_region_cache(cache)
         return region_map
 
-    def get_location_map(self, df) -> dict:
+    def get_location_map(self, df, country_hint: str | None = None) -> dict:
         cache = self._load_geocache()
         geolocator = Nominatim(user_agent="jobscrape")
         rate_lock = Lock()
@@ -122,7 +143,10 @@ class Geocoder:
             if self.verbose > 0:
                 print(f"Geocoding {len(misses)} new locations ({len(hits)} cached)...")
             with ThreadPoolExecutor(max_workers=self._MAX_WORKERS) as executor:
-                futures = {executor.submit(self._geocode_one, loc, geolocator, rate_lock): loc for loc in misses}
+                futures = {
+                    executor.submit(self._geocode_one, loc, geolocator, rate_lock, country_hint): loc
+                    for loc in misses
+                }
                 for future in as_completed(futures):
                     loc, result = future.result()
                     location_map[loc] = result

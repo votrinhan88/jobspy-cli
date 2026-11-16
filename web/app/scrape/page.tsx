@@ -6,6 +6,7 @@ import type { ScrapeStatus } from "@/lib/scrape-status";
 import { ScheduleSelect } from "@/app/scrape/_components/schedule-select";
 import { FetchDescriptionOption } from "@/app/scrape/_components/fetch-description-option";
 import { JobspyUpdateNotice } from "@/app/scrape/_components/jobspy-update-notice";
+import { SourceRunsTable } from "@/app/scrape/_components/source-runs-table";
 
 function formatDuration(started: string | null, finished: string | null): string {
   if (!started || !finished) return "—";
@@ -349,6 +350,7 @@ export default function ScrapePage() {
       total_jobs: null,
       error: null,
       pid: null,
+      source_runs: [],
     };
   }
 
@@ -394,6 +396,7 @@ export default function ScrapePage() {
 
       <JobspyUpdateNotice />
       <StatusBanner status={status} />
+      {status && status.status !== "running" && <SourceRunsTable runs={status.source_runs} />}
       {runError && <div className="alert alert-error">{runError}</div>}
       {isRunning && <ScrapeProgress log={log} isRunning={isRunning} />}
 

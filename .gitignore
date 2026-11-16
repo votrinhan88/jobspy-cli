@@ -13,3 +13,6 @@ data/
 # Next.js
 web/.next/
 web/node_modules/
+
+# Claude Code link to .agents/skills (made by scripts/link-skills.ps1)
+.claude/

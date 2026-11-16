@@ -1,8 +1,9 @@
 import { spawn } from "child_process";
-import { openSync, closeSync, writeFileSync, readFileSync, existsSync } from "fs";
+import { openSync, closeSync, writeFileSync, existsSync } from "fs";
 import path from "path";
 import { jobsCsvPath, profileDir, scrapeLogPath } from "@/lib/profile";
 import { readConfig } from "@/lib/config";
+import { readScrapeRun } from "@/lib/scrape-run";
 import {
   writeScrapeStatus,
   readScrapeStatus,
@@ -45,6 +46,7 @@ export async function startScrape(profile: string): Promise<StartScrapeResult> {
     updated_jobs: null,
     total_jobs: null,
     error: null,
+    source_runs: [],
   });
 
   const child = spawn("uv", ["run", "python", "main.py", ...args], {
@@ -76,8 +78,20 @@ export async function startScrape(profile: string): Promise<StartScrapeResult> {
 
   child.on("close", async (code) => {
     if (code === 0) {
-      const counts = parseCountsFromLog(logPath);
-      await finish({ status: "done", finished_at: new Date().toISOString(), ...counts });
+      const report = await readScrapeRun(profile);
+      const sourceRuns = report?.sources ?? [];
+      const allFailed =
+        sourceRuns.length > 0 &&
+        sourceRuns.every((run) => run.attempts > 0 && run.failed === run.attempts);
+      const final: FinalStatus = {
+        status: allFailed ? "error" : "done",
+        finished_at: new Date().toISOString(),
+        new_jobs: report?.new_jobs ?? null,
+        total_jobs: report?.total_jobs ?? null,
+        source_runs: sourceRuns,
+        error: allFailed ? "All sources failed. See the source table." : null,
+      };
+      await finish(final);
     } else {
       await finish({ status: "error", finished_at: new Date().toISOString(), error: `Process exited with code ${code}` });
     }
@@ -103,15 +117,6 @@ async function finishRun(profile: string, final: FinalStatus): Promise<void> {
   if (!existsSync(profileDir(profile))) return;
   await writeScrapeStatus(profile, final);
   await appendScrapeHistory(profile, await readScrapeStatus(profile));
-}
-
-function parseCountsFromLog(logPath: string): { new_jobs: number | null; total_jobs: number | null } {
-  try {
-    const text = readFileSync(logPath, "utf-8");
-    const match = [...text.matchAll(/Appended:\s+(\d+)\s+new jobs?\s+\((\d+)\s+total\)/g)].pop();
-    if (match) return { new_jobs: parseInt(match[1]), total_jobs: parseInt(match[2]) };
-  } catch { /* log may not exist */ }
-  return { new_jobs: null, total_jobs: null };
 }
 
 function buildArgs(config: Awaited<ReturnType<typeof readConfig>>, savePath: string): string[] {

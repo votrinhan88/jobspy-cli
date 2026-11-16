@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Job, JobStatus } from "@/lib/csv";
 import { STATUSES, isRemote, statusLabel } from "@/lib/status";
+import { FACET_FILTERS, facetOptions, facetValueLabel, type FacetKey } from "@/lib/facets";
+import { formatLastSeen, isClosed, isStale } from "@/lib/lifecycle";
 import {
   DEFAULT_SORT,
   filterJobs,
@@ -37,7 +39,7 @@ const COLUMNS: { key: SortKey; label: string }[] = [
   { key: "status", label: "Status" },
 ];
 
-const TABLE_COLUMNS = COLUMNS.length + 2;
+const TABLE_COLUMNS = COLUMNS.length + 3;
 
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -180,6 +182,26 @@ function JobDrawer({
           </div>
 
           <div className="drawer-field">
+            <span className="drawer-label">Last seen</span>
+            <span className="mono">{formatLastSeen(job.last_seen_at)}</span>
+            {isClosed(job.closed_at) ? (
+              <span className="lifecycle-badge lifecycle-badge--closed">Closed</span>
+            ) : isStale(job.last_seen_at) ? (
+              <span className="lifecycle-badge lifecycle-badge--stale">Stale</span>
+            ) : null}
+          </div>
+
+          {isClosed(job.closed_at) && (
+            <div className="drawer-field">
+              <span className="drawer-label">Closed</span>
+              <span className="mono">
+                {formatLastSeen(job.closed_at)}
+                {job.closed_reason ? ` · ${job.closed_reason}` : ""}
+              </span>
+            </div>
+          )}
+
+          <div className="drawer-field">
             <span className="drawer-label">Source</span>
             <span className="count-badge">{extra["site"] || "—"}</span>
             {remote && <span className="count-badge" style={{ marginLeft: 6 }}>Remote</span>}
@@ -257,6 +279,13 @@ export default function JobsPage() {
   const [query, setQuery] = useState("");
   const [statuses, setStatuses] = useState<Set<JobStatus>>(new Set());
   const [remoteOnly, setRemoteOnly] = useState(false);
+  const [facets, setFacets] = useState<Record<FacetKey, string>>({
+    country: "",
+    city: "",
+    work_mode: "",
+    seniority: "",
+    employment_type: "",
+  });
   const [groupLocations, setGroupLocations] = useState(false);
   const [sort, setSort] = useState(DEFAULT_SORT);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -283,7 +312,25 @@ export default function JobsPage() {
     load();
   }, []);
 
-  const filters = useMemo(() => ({ query, statuses, remoteOnly }), [query, statuses, remoteOnly]);
+  const filters = useMemo(
+    () => ({
+      query,
+      statuses,
+      remoteOnly,
+      country: facets.country,
+      city: facets.city,
+      workMode: facets.work_mode,
+      seniority: facets.seniority,
+      employmentType: facets.employment_type,
+    }),
+    [query, statuses, remoteOnly, facets]
+  );
+  const facetChoices = useMemo(() => {
+    const choices = {} as Record<FacetKey, string[]>;
+    for (const { key } of FACET_FILTERS) choices[key] = facetOptions(jobs, key);
+    return choices;
+  }, [jobs]);
+  const hasFacetFilters = useMemo(() => Object.values(facets).some(Boolean), [facets]);
   const counts = useMemo(() => statusCounts(jobs, filters), [jobs, filters]);
   const visible = useMemo(
     () => sortJobs(filterJobs(jobs, filters), sort.key, sort.dir),
@@ -316,6 +363,8 @@ export default function JobsPage() {
 
   function renderJobRow(job: Job) {
     const salary = formatSalary(job);
+    const closed = isClosed(job.closed_at);
+    const stale = !closed && isStale(job.last_seen_at);
     return (
       <tr
         key={job.job_id}
@@ -333,6 +382,14 @@ export default function JobsPage() {
         <td className="job-company-cell" data-label="Company">{job.company || "—"}</td>
         <td className="muted" data-label="Location">{formatLocation(job) || "—"}</td>
         <td className="muted mono" data-label="Posted">{job.date_posted || "—"}</td>
+        <td className="muted mono" data-label="Last seen">
+          <span>{formatLastSeen(job.last_seen_at)}</span>
+          {closed ? (
+            <span className="lifecycle-badge lifecycle-badge--closed">Closed</span>
+          ) : stale ? (
+            <span className="lifecycle-badge lifecycle-badge--stale">Stale</span>
+          ) : null}
+        </td>
         <td data-label="Status"><StatusChip status={job.status} /></td>
         <td className="cell-mobile-only salary-display" data-label="Salary">{salary || "—"}</td>
         <td className="action-cell">
@@ -351,6 +408,14 @@ export default function JobsPage() {
       else next.add(status);
       return next;
     });
+  }
+
+  function setFacet(key: FacetKey, value: string) {
+    setFacets((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function clearFacets() {
+    setFacets({ country: "", city: "", work_mode: "", seniority: "", employment_type: "" });
   }
 
   if (noProfile) {
@@ -435,6 +500,37 @@ export default function JobsPage() {
         </div>
       )}
 
+      {!loading && jobs.length > 0 && (
+        <div className="facet-bar" role="group" aria-label="Filter by facets">
+          {FACET_FILTERS.map(({ key, label }) => (
+            <label key={key} className="facet-field">
+              <span className="facet-label">{label}</span>
+              <select
+                className="input input--sm facet-select"
+                aria-label={label}
+                value={facets[key]}
+                onChange={(e) => setFacet(key, e.target.value)}
+              >
+                <option value="">All</option>
+                {facetChoices[key].map((value) => (
+                  <option key={value} value={value}>
+                    {facetValueLabel(key, value)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ))}
+          <button
+            type="button"
+            className="filter-chip"
+            onClick={clearFacets}
+            disabled={!hasFacetFilters}
+          >
+            Clear facets
+          </button>
+        </div>
+      )}
+
       {error && <div className="alert alert-error">{error}</div>}
 
       {loading ? (
@@ -464,6 +560,7 @@ export default function JobsPage() {
                     </th>
                   );
                 })}
+                <th>Last seen</th>
                 <th className="cell-mobile-only">Salary</th>
                 <th><span className="sr-only">Actions</span></th>
               </tr>

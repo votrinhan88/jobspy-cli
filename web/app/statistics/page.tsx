@@ -100,6 +100,36 @@ export default function StatisticsPage() {
               />
             </div>
           </section>
+          <section className="section">
+            <h2 className="section-title">Facets</h2>
+            <div className="breakdown-grid">
+              <TopList
+                title="Top countries"
+                items={stats.facets.countries}
+                empty="No countries recorded."
+              />
+              <TopList
+                title="Top cities"
+                items={stats.facets.cities}
+                empty="No cities recorded."
+              />
+              <TopList
+                title="Work modes"
+                items={stats.facets.workModes}
+                empty="No work modes recorded."
+              />
+              <TopList
+                title="Seniority"
+                items={stats.facets.seniorities}
+                empty="No seniority values recorded."
+              />
+              <TopList
+                title="Employment type"
+                items={stats.facets.employmentTypes}
+                empty="No employment types recorded."
+              />
+            </div>
+          </section>
         </>
       )}
     </div>

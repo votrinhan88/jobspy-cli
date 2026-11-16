@@ -1,13 +1,14 @@
 // @vitest-environment node
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
-const { spawn, readScrapeStatus, writeScrapeStatus, appendScrapeHistory, readConfig, existsSync } =
+const { spawn, readScrapeStatus, writeScrapeStatus, appendScrapeHistory, readConfig, readScrapeRun, existsSync } =
   vi.hoisted(() => ({
     spawn: vi.fn(),
     readScrapeStatus: vi.fn(),
     writeScrapeStatus: vi.fn(),
     appendScrapeHistory: vi.fn(),
     readConfig: vi.fn(),
+    readScrapeRun: vi.fn(),
     existsSync: vi.fn(),
   }));
 
@@ -25,6 +26,7 @@ vi.mock("@/lib/scrape-status", () => ({
   appendScrapeHistory,
 }));
 vi.mock("@/lib/config", () => ({ readConfig }));
+vi.mock("@/lib/scrape-run", () => ({ readScrapeRun }));
 vi.mock("@/lib/profile", () => ({
   profileDir: (p: string) => `/data/${p}`,
   jobsCsvPath: (p: string) => `/custom-data/${p}/jobs.csv`,
@@ -60,6 +62,7 @@ function handler(on: ReturnType<typeof vi.fn>, event: string) {
 beforeEach(() => {
   vi.clearAllMocks();
   readConfig.mockResolvedValue({ ...CONFIG });
+  readScrapeRun.mockResolvedValue(null);
   existsSync.mockReturnValue(true);
   killSpy = vi.spyOn(process, "kill").mockImplementation(() => true);
   fakeChild();
@@ -188,6 +191,82 @@ describe("startScrape keyword check", () => {
     expect(result).toEqual({ started: false, reason: "no_keywords" });
     expect(spawn).not.toHaveBeenCalled();
     expect(writeScrapeStatus).not.toHaveBeenCalled();
+  });
+});
+
+describe("startScrape run report", () => {
+  it("uses the structured report for counts and sources", async () => {
+    readScrapeStatus.mockResolvedValue({ status: "idle" });
+    const sources = [
+      {
+        site: "linkedin",
+        attempts: 1,
+        succeeded: 1,
+        failed: 0,
+        skipped: 0,
+        jobs: 5,
+        duration_ms: 1200,
+        error: null,
+      },
+    ];
+    readScrapeRun.mockResolvedValue({
+      started_at: "2026-11-04T08:00:00Z",
+      finished_at: "2026-11-04T08:01:00Z",
+      new_jobs: 3,
+      total_jobs: 10,
+      sources,
+    });
+    const on = fakeChild();
+    await startScrape("alice");
+
+    await handler(on, "close")(0);
+
+    expect(writeScrapeStatus).toHaveBeenLastCalledWith(
+      "alice",
+      expect.objectContaining({
+        status: "done",
+        new_jobs: 3,
+        total_jobs: 10,
+        source_runs: sources,
+      })
+    );
+  });
+
+  it("marks the run as failed when every source failed", async () => {
+    readScrapeStatus.mockResolvedValue({ status: "idle" });
+    readScrapeRun.mockResolvedValue({
+      started_at: "2026-11-04T08:00:00Z",
+      finished_at: "2026-11-04T08:01:00Z",
+      new_jobs: 0,
+      total_jobs: 0,
+      sources: [
+        {
+          site: "linkedin",
+          attempts: 1,
+          succeeded: 0,
+          failed: 1,
+          skipped: 0,
+          jobs: 0,
+          duration_ms: 800,
+          error: "blocked",
+        },
+      ],
+    });
+    const on = fakeChild();
+    await startScrape("alice");
+
+    await handler(on, "close")(0);
+
+    expect(writeScrapeStatus).toHaveBeenLastCalledWith(
+      "alice",
+      expect.objectContaining({
+        status: "error",
+        error: expect.stringMatching(/all sources failed/i),
+        source_runs: expect.arrayContaining([
+          expect.objectContaining({ site: "linkedin", failed: 1 }),
+        ]),
+      })
+    );
   });
 });
 

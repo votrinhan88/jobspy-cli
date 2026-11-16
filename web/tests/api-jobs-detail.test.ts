@@ -36,6 +36,20 @@ describe("GET /api/jobs", () => {
     for (const row of rows) expect("description" in row).toBe(false);
     expect(rows[0]).toMatchObject({ job_id: "acme-ml-aaaa1111", title: "ML Engineer", status: "shortlisted" });
   });
+
+  it("hides rows that are marked as duplicates", async () => {
+    await seedProfile(dataDir, "alice", {
+      "jobs.csv": [
+        "job_id,title,company,location,description,job_url,status,status_updated_at,duplicate_of",
+        "canonical-1,AI Engineer,Acme,Sydney,,https://x.io/1,,,",
+        "duplicate-1,AI Engineer,Acme,Sydney,,https://x.io/2,,,canonical-1",
+      ].join("\n"),
+    });
+
+    const rows = await (await jobsRoute.GET()).json();
+
+    expect(rows.map((row: { job_id: string }) => row.job_id)).toEqual(["canonical-1"]);
+  });
 });
 
 describe("GET /api/jobs/[jobId]", () => {
