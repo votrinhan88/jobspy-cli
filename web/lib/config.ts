@@ -9,6 +9,7 @@ export interface ScrapeConfig {
   workers: number;
   title_exclude: string[];
   exclude_companies: string[];
+  schedule: string | null;
 }
 
 const DEFAULTS: ScrapeConfig = {
@@ -19,6 +20,7 @@ const DEFAULTS: ScrapeConfig = {
   workers: 4,
   title_exclude: [],
   exclude_companies: [],
+  schedule: null,
 };
 
 export async function readConfig(profile: string): Promise<ScrapeConfig> {

@@ -1,8 +1,23 @@
 import type { Metadata } from "next";
+import { Inter, JetBrains_Mono } from "next/font/google";
 import { Nav } from "@/components/nav";
 import { ToastProvider } from "@/components/toast";
 import { getActiveProfile } from "@/lib/profile";
 import "./globals.css";
+
+const inter = Inter({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  display: "swap",
+  variable: "--font-inter",
+});
+
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500"],
+  display: "swap",
+  variable: "--font-jetbrains-mono",
+});
 
 export const metadata: Metadata = {
   title: "jobspy",
@@ -13,15 +28,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
   const activeProfile = await getActiveProfile();
 
   return (
-    <html lang="en" className="h-full">
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap"
-          rel="stylesheet"
-        />
-      </head>
+    <html lang="en" className={`h-full ${inter.variable} ${jetbrainsMono.variable}`}>
       <body>
         <ToastProvider>
           <div className="app-shell">

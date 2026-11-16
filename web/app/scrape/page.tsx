@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ScrapeConfig } from "@/lib/config";
 import type { ScrapeStatus } from "@/lib/scrape-status";
+import { ScheduleSelect } from "@/app/scrape/_components/schedule-select";
 
 function formatDuration(started: string | null, finished: string | null): string {
   if (!started || !finished) return "—";
@@ -203,6 +204,7 @@ export default function ScrapePage() {
   const [status, setStatus] = useState<ScrapeStatus | null>(null);
   const [noProfile, setNoProfile] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
   const [log, setLog] = useState("");
@@ -212,38 +214,19 @@ export default function ScrapePage() {
   const logPollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const configRef = useRef<ScrapeConfig | null>(null);
 
-  useEffect(() => {
-    loadAll();
-    return () => {
-      if (pollTimer.current) clearInterval(pollTimer.current);
-      if (logPollTimer.current) clearInterval(logPollTimer.current);
-    };
-  }, []);
-
-  async function fetchLog() {
+  const fetchLog = useCallback(async () => {
     const res = await fetch("/api/scrape/log");
     if (res.ok) setLog(await res.text());
-  }
+  }, []);
 
-  async function loadAll() {
-    const [cfgRes, stRes] = await Promise.all([
-      fetch("/api/scrape/config"),
-      fetch("/api/scrape/status"),
-    ]);
-    if (cfgRes.status === 400 || stRes.status === 400) {
-      setNoProfile(true);
-      return;
+  const stopLogPolling = useCallback(() => {
+    if (logPollTimer.current) {
+      clearInterval(logPollTimer.current);
+      logPollTimer.current = null;
     }
-    if (cfgRes.ok) setConfig(await cfgRes.json());
-    if (stRes.ok) {
-      const st: ScrapeStatus = await stRes.json();
-      setStatus(st);
-      if (st.status === "running") startPolling();
-    }
-    fetchLog();
-  }
+  }, []);
 
-  function startPolling() {
+  const startPolling = useCallback(() => {
     if (pollTimer.current) return;
     pollTimer.current = setInterval(async () => {
       const res = await fetch("/api/scrape/status");
@@ -261,14 +244,33 @@ export default function ScrapePage() {
 
     if (logPollTimer.current) return;
     logPollTimer.current = setInterval(fetchLog, 1000);
-  }
+  }, [fetchLog, stopLogPolling]);
 
-  function stopLogPolling() {
-    if (logPollTimer.current) {
-      clearInterval(logPollTimer.current);
-      logPollTimer.current = null;
+  useEffect(() => {
+    async function loadAll() {
+      const [cfgRes, stRes] = await Promise.all([
+        fetch("/api/scrape/config"),
+        fetch("/api/scrape/status"),
+      ]);
+      if (cfgRes.status === 400 || stRes.status === 400) {
+        setNoProfile(true);
+        return;
+      }
+      if (cfgRes.ok) setConfig(await cfgRes.json());
+      if (stRes.ok) {
+        const st: ScrapeStatus = await stRes.json();
+        setStatus(st);
+        if (st.status === "running") startPolling();
+      }
+      fetchLog();
     }
-  }
+
+    loadAll();
+    return () => {
+      if (pollTimer.current) clearInterval(pollTimer.current);
+      if (logPollTimer.current) clearInterval(logPollTimer.current);
+    };
+  }, [fetchLog, startPolling]);
 
   function updateConfig(patch: Partial<ScrapeConfig>) {
     if (!config) return;
@@ -291,11 +293,17 @@ export default function ScrapePage() {
   async function saveConfig(cfg: ScrapeConfig) {
     setSaving(true);
     try {
-      await fetch("/api/scrape/config", {
+      const res = await fetch("/api/scrape/config", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(cfg),
       });
+      if (res.ok) {
+        setSaveError(null);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setSaveError(data.error ?? "Could not save the configuration");
+      }
     } finally {
       setSaving(false);
     }
@@ -338,6 +346,7 @@ export default function ScrapePage() {
       updated_jobs: null,
       total_jobs: null,
       error: null,
+      pid: null,
     };
   }
 
@@ -370,6 +379,7 @@ export default function ScrapePage() {
         </div>
         <div className="header-actions">
           {saving && <span className="saving-indicator">Saving…</span>}
+          {saveError && <span className="run-error-inline">{saveError}</span>}
           <button
             className="btn btn-primary"
             onClick={runScrape}
@@ -428,6 +438,14 @@ export default function ScrapePage() {
             onChange={(e) =>
               updateConfig({ results_wanted: parseInt(e.target.value) || 20 })
             }
+          />
+        </div>
+
+        <div className="form-field">
+          <label className="form-label">Schedule</label>
+          <ScheduleSelect
+            value={config.schedule}
+            onChange={(v) => updateConfig({ schedule: v })}
           />
         </div>
 

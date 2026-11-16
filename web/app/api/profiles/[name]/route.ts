@@ -9,6 +9,8 @@ import {
   PROFILE_COOKIE,
   PROFILE_COOKIE_OPTIONS,
 } from "@/lib/profile";
+import { readConfig } from "@/lib/config";
+import { registerSchedule, unregisterSchedule } from "@/lib/scheduler";
 
 const INVALID_NAME = "Profile name must be 1-64 characters: letters, digits, hyphens, underscores";
 
@@ -43,6 +45,10 @@ export async function PATCH(
 
   await fs.rename(profileDir(oldName), profileDir(newName));
 
+  unregisterSchedule(oldName);
+  const { schedule } = await readConfig(newName);
+  registerSchedule(newName, schedule);
+
   const cookieStore = await cookies();
   if (cookieStore.get(PROFILE_COOKIE)?.value === oldName) {
     cookieStore.set(PROFILE_COOKIE, newName, PROFILE_COOKIE_OPTIONS);
@@ -72,6 +78,7 @@ export async function DELETE(
 
   const active = await getActiveProfile();
   await fs.rm(profileDir(name), { recursive: true, force: true });
+  unregisterSchedule(name);
 
   let newActive: string | null = active;
   if (active === name) {
@@ -79,7 +86,7 @@ export async function DELETE(
     newActive = remaining[0] ?? null;
     const cookieStore = await cookies();
     if (newActive) {
-      cookieStore.set(PROFILE_COOKIE, newActive, { httpOnly: true, path: "/" });
+      cookieStore.set(PROFILE_COOKIE, newActive, PROFILE_COOKIE_OPTIONS);
     } else {
       cookieStore.delete(PROFILE_COOKIE);
     }

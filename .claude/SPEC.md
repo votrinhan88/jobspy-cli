@@ -124,15 +124,18 @@ One line per successful status change, appended by `PATCH /api/jobs/[jobId]`. Un
   "site_name": ["linkedin", "indeed", "google", "zip_recruiter"],
   "workers": 4,
   "title_exclude": [],
-  "exclude_companies": []
+  "exclude_companies": [],
+  "schedule": null
 }
 ```
 
-All fields match existing CLI arguments. The web app reads this file as form defaults and writes it back on change.
+All fields except `schedule` match existing CLI arguments. The web app reads this file as form defaults and writes it back on change.
+
+`schedule` is a cron expression (for example `0 8 * * *`) or `null` (off). A missing field reads as `null`. The server registers one `node-cron` task per profile that has a schedule. It registers all saved schedules at startup (`web/instrumentation.ts`) and re-registers a profile when `PUT /api/scrape/config` saves a change. A scheduled run uses the same `startScrape` function as `POST /api/scrape/run`, so it skips when a scrape is already running for that profile. Deleting a profile unregisters its task. Renaming a profile unregisters the old task and registers the saved schedule under the new name. Schedules use server local time and fire only while the server process runs. `PUT /api/scrape/config` rejects a schedule while `job` is empty. A scheduled run with no keywords skips and logs one line.
 
 ### `scrape_status.json` structure
 
-Written by the Python subprocess. Read by the web app via polling.
+Written by the web server (`lib/scrape-runner.ts`). Read by the web app via polling.
 
 ```json
 {
@@ -142,11 +145,14 @@ Written by the Python subprocess. Read by the web app via polling.
   "new_jobs": null,
   "updated_jobs": null,
   "total_jobs": null,
-  "error": null
+  "error": null,
+  "pid": null
 }
 ```
 
 `status` values: `idle` | `running` | `done` | `error`
+
+`pid` is the process id of the scrape child. A `running` status counts as live only when `pid` is set and the process still exists. Otherwise the status is stale (for example after a server crash) and a new run may start. This keeps one scrape per profile without a manual reset.
 
 ---
 
@@ -221,10 +227,10 @@ Written by the Python subprocess. Read by the web app via polling.
 | `PATCH` | `/api/jobs/[jobId]` | Body `{ status, status_updated_at? }`. Any status to any status, including `""`. `status_updated_at` is optional: an ISO 8601 date and time, or `""` (undo of a new job); absent means now; invalid gives 422. Unknown status gives 422, unknown job 404, no profile 400. Keeps other columns and row order. Appends one line to `status_log.jsonl`. Returns the updated row. |
 | `GET` | `/api/jobs/log` | Read `status_log.jsonl` for the active profile; returns a list of `{ job_id, from, to, at }` |
 | `GET` | `/api/scrape/status` | Read `scrape_status.json` |
-| `POST` | `/api/scrape/run` | Spawn Python subprocess, reset `scrape.log`, write initial `scrape_status.json` |
+| `POST` | `/api/scrape/run` | Spawn Python subprocess, reset `scrape.log`, write initial `scrape_status.json`. Returns 409 when a live scrape runs, 400 when `job` is empty |
 | `GET` | `/api/scrape/log` | Read `scrape.log` for the active profile (plain text) |
 | `GET` | `/api/scrape/config` | Read `scrape_config.json` |
-| `PUT` | `/api/scrape/config` | Write `scrape_config.json` |
+| `PUT` | `/api/scrape/config` | Validate `schedule` (400 on an invalid cron expression, nothing saved), write `scrape_config.json`, re-register the profile schedule |
 | `GET` | `/api/resume` | Read CV file metadata |
 | `POST` | `/api/resume` | Upload and save CV file |
 | `GET` | `/api/profiles` | List all profile directories; returns `{ profiles, active }` |
@@ -277,10 +283,9 @@ Concurrent runs against the same profile are blocked — "Run scrape" button is 
 |------|---------------|
 | Job scoring (feature 4) | After semantic CV/JD matching (feature 6 or 9) |
 | Gap analysis via Claude API (feature 6) | After Resume page ships |
-| Semantic job search (feature 9) | After gap analysis ships |
+| Semantic job search (feature 9) | Dropped on 2026-11-01. Reopen if text search misses wanted jobs |
 | SQLite migration | When CSV flat-file access becomes a bottleneck |
 | Authentication | If the app is ever exposed beyond localhost |
-| Scrape triggering via scheduler (feature 7) | After web scrape trigger is stable |
 
 ---
 

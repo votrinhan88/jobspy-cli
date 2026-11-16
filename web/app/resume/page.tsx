@@ -22,14 +22,13 @@ export default function ResumePage() {
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    async function load() {
+      const res = await fetch("/api/resume");
+      if (res.status === 400) { setNoProfile(true); return; }
+      if (res.ok) setMeta(await res.json());
+    }
     load();
   }, []);
-
-  async function load() {
-    const res = await fetch("/api/resume");
-    if (res.status === 400) { setNoProfile(true); return; }
-    if (res.ok) setMeta(await res.json());
-  }
 
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];

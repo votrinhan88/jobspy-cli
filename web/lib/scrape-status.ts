@@ -11,6 +11,7 @@ export interface ScrapeStatus {
   updated_jobs: number | null;
   total_jobs: number | null;
   error: string | null;
+  pid: number | null;
 }
 
 const IDLE: ScrapeStatus = {
@@ -21,6 +22,7 @@ const IDLE: ScrapeStatus = {
   updated_jobs: null,
   total_jobs: null,
   error: null,
+  pid: null,
 };
 
 export async function readScrapeStatus(profile: string): Promise<ScrapeStatus> {

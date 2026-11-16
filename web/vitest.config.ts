@@ -1,12 +1,29 @@
 import path from "path";
 import { defineConfig } from "vitest/config";
 
+const alias = { "@": path.resolve(__dirname) };
+
 export default defineConfig({
-  resolve: {
-    alias: { "@": path.resolve(__dirname) },
-  },
   test: {
-    environment: "node",
-    include: ["tests/**/*.test.ts"],
+    projects: [
+      {
+        resolve: { alias },
+        test: {
+          name: "node",
+          environment: "node",
+          include: ["tests/**/*.test.ts"],
+        },
+      },
+      {
+        resolve: { alias },
+        test: {
+          name: "dom",
+          environment: "jsdom",
+          include: ["tests/**/*.test.tsx"],
+          setupFiles: ["./vitest.setup.ts"],
+          globals: true,
+        },
+      },
+    ],
   },
 });

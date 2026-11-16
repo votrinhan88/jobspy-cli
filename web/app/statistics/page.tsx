@@ -15,27 +15,26 @@ export default function StatisticsPage() {
   const [noProfile, setNoProfile] = useState(false);
 
   useEffect(() => {
+    async function load() {
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await fetch("/api/jobs");
+        if (res.status === 400) {
+          setNoProfile(true);
+          return;
+        }
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data: Job[] = await res.json();
+        setJobs(data);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Failed to load statistics");
+      } finally {
+        setLoading(false);
+      }
+    }
     load();
   }, []);
-
-  async function load() {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/jobs");
-      if (res.status === 400) {
-        setNoProfile(true);
-        return;
-      }
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data: Job[] = await res.json();
-      setJobs(data);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load statistics");
-    } finally {
-      setLoading(false);
-    }
-  }
 
   const stats: Statistics = useMemo(() => computeStatistics(jobs), [jobs]);
 
