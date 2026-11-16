@@ -786,6 +786,33 @@ nextjs-portal {
   background: var(--app-surface);
 }
 
+.group-row th {
+  font-weight: 600;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.group-row--country th {
+  padding-top: 18px;
+  font-size: 14px;
+  color: var(--app-ink);
+  border-bottom: 1px solid var(--app-border);
+}
+
+.group-row--region th {
+  padding-left: 28px;
+  font-size: 12px;
+  color: var(--app-ink-muted);
+  background: var(--app-surface);
+}
+
+.group-row-count {
+  margin-left: 8px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  color: var(--app-ink-muted);
+}
+
 .job-title-cell {
   max-width: 320px;
 }

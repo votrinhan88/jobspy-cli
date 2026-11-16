@@ -72,7 +72,7 @@ jobspy-cli/
 | `scrape.log` | stdout/stderr of the most recent scrape subprocess; reset on each run |
 | `status_log.jsonl` | Append-only history of status changes, one JSON object per line. Written by the web app. The engine does not read it. |
 
-`data/.geocache.json` lives at the `data/` root (shared across all profiles) and caches Nominatim geocoding results by raw location string.
+`data/.geocache.json` lives at the `data/` root (shared across all profiles) and caches Nominatim geocoding results by raw location string. `data/.regioncache.json` caches the region (state or province) of a standardized location ("City, Country"). A failed lookup is not cached.
 
 ---
 
@@ -87,6 +87,7 @@ All existing scraper columns plus:
 | `job_id` | string | computed | Kebab-case slug: `{company}-{title}-{8-char-md5(job_url)}`. Max 20 chars per segment before slugifying. Written at scrape time. Preserved by upsert. |
 | `status` | string | `""` | One of: `shortlisted`, `applied`, `interview`, `offer`, `rejected`, `skipped`, `""`. Written by scraper (empty). Updated by web app. Preserved by upsert. |
 | `status_updated_at` | string | `""` | ISO 8601 timestamp. Set by web app on status change. Preserved by upsert. |
+| `region` | string | `""` | State or province of `location`, from the geocoder. Filled after the upsert, only where empty, for the location the row keeps. Old rows get it from `scripts/backfill_region.py --save_path <jobs.csv>`. Not in `_PRESERVE_ON_UPSERT`, because it is derived from `location`. |
 
 ### Status pipeline
 
@@ -121,7 +122,7 @@ One line per successful status change, appended by `PATCH /api/jobs/[jobId]`. Un
   "job": ["AI Engineer", "ML Engineer"],
   "location": ["Australia", "Vietnam"],
   "results_wanted": 20,
-  "site_name": ["linkedin", "indeed", "google", "zip_recruiter"],
+  "site_name": ["linkedin", "indeed", "zip_recruiter"],
   "workers": 4,
   "title_exclude": [],
   "exclude_companies": [],
@@ -176,6 +177,7 @@ Written by the web server (`lib/scrape-runner.ts`). Read by the web app via poll
 **Function:** View all rows in `jobs.csv`, regardless of status.
 
 - Table of all scraped jobs. Default sort: Posted, newest first. The Title, Company, Location, Posted and Status headers are sort buttons with `aria-sort`. Empty values sort last. Status sorts in pipeline order.
+- The Location sort orders by country (the last part of `location`), then region, then city. Empty values sort last in both directions. A "Group by location" toggle (`aria-pressed`, off by default) adds country and region header rows with job counts. Countries and regions are alphabetical, "Unknown location" and "No region" come last, and the current sort orders the rows inside each region. The logic is in `web/lib/jobs-view.ts` (`splitLocation`, `groupByLocation`).
 - Status filter chips with counts: All, New, Shortlisted, Applied, Interview, Offer, Rejected, Skipped (toggle buttons with `aria-pressed`; several can be on). A "Remote only" toggle. Counts follow the search and the remote filter, not the status filter.
 - Search (labelled) matches title, company and location. Every word must match. The counter reads "{n} of {total} jobs".
 - New rows have "Shortlist" and "Skip". A skipped job stays in the list with its chip. Each change shows the undo toast.

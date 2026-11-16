@@ -14,7 +14,7 @@ def build_parser() -> argparse.ArgumentParser:
     optional_group = parser.add_argument_group('Optional arguments')
     optional_group.add_argument("--save_path", type=str, default="./jobs.csv", help="Path to save the resulting CSV file.")
     optional_group.add_argument("--results_wanted", type=int, default=10, help="Number of job results to fetch per (job, location) pair.")
-    optional_group.add_argument("--site_name", type=str, nargs='+', default=["linkedin", "zip_recruiter", "indeed", "google"], help="List of job sites to scrape from.")
+    optional_group.add_argument("--site_name", type=str, nargs='+', default=["linkedin", "zip_recruiter", "indeed"], help="List of job sites to scrape from.")
     optional_group.add_argument("--verbose", type=int, default=1, help="Verbosity level: 0 (errors only), 1 (errors + warnings), 2 (all logs)")
     optional_group.add_argument("--workers", type=int, default=4, help="Number of parallel scraping workers (default: 4)")
     optional_group.add_argument("--overwrite", action="store_true", help="Overwrite existing CSV instead of appending")

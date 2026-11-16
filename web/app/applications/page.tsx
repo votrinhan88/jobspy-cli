@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { Job, JobStatus } from "@/lib/csv";
+import { formatLocation } from "@/lib/jobs-view";
 import { STATUSES, isActiveStatus, isArchivedStatus, statusLabel } from "@/lib/status";
 import type { StatusLogEntry } from "@/lib/status-log";
 import { buildGanttRows, type GanttData } from "@/lib/gantt";
@@ -249,7 +250,7 @@ function JobCard({ job, busy, onChange }: { job: Job; busy: boolean; onChange: C
         {job.title}
       </a>
       <p className="job-card-company">{job.company}</p>
-      {job.location && <p className="job-card-location">{job.location}</p>}
+      {job.location && <p className="job-card-location">{formatLocation(job)}</p>}
       <div className="job-card-actions">
         <CardActions job={job} busy={busy} onChange={onChange} />
       </div>
@@ -280,7 +281,7 @@ function TableView({ jobs, pending, onChange }: { jobs: Job[]; pending: Set<stri
                 </a>
               </td>
               <td>{job.company}</td>
-              <td className="muted">{job.location || "—"}</td>
+              <td className="muted">{formatLocation(job) || "—"}</td>
               <td>
                 <span className={`status-chip status-chip--${job.status}`}>{statusLabel(job.status)}</span>
               </td>

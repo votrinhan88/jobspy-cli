@@ -125,7 +125,7 @@ export async function createProfile(name: string): Promise<void> {
       job: [],
       location: [],
       results_wanted: 20,
-      site_name: ["linkedin", "indeed", "google"],
+      site_name: ["linkedin", "indeed"],
       workers: 4,
       title_exclude: [],
       exclude_companies: [],

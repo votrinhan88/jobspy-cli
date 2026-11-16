@@ -49,3 +49,22 @@ describe("readConfig fetch_linkedin_description field", () => {
     expect((await readConfig("p")).fetch_linkedin_description).toBe(false);
   });
 });
+
+describe("readConfig site list", () => {
+  beforeEach(() => vi.resetAllMocks());
+
+  it("does not list Google Jobs in the defaults", async () => {
+    vi.mocked(fs.readFile).mockRejectedValue(new Error("ENOENT"));
+    expect((await readConfig("p")).site_name).toEqual(["linkedin", "indeed"]);
+  });
+
+  it("drops Google Jobs from a saved site list because it returns no data", async () => {
+    vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify({ site_name: ["linkedin", "indeed", "google"] }));
+    expect((await readConfig("p")).site_name).toEqual(["linkedin", "indeed"]);
+  });
+
+  it("keeps the other saved sites in order", async () => {
+    vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify({ site_name: ["zip_recruiter", "google", "linkedin"] }));
+    expect((await readConfig("p")).site_name).toEqual(["zip_recruiter", "linkedin"]);
+  });
+});

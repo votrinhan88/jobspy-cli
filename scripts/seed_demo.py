@@ -18,7 +18,7 @@ titles = ["Data Scientist", "Machine Learning Engineer", "AI Engineer", "Senior 
 locs = [("Sydney, NSW, Australia", "False"), ("Melbourne, VIC, Australia", "False"), ("Brisbane, QLD, Australia", "False"),
     ("Ho Chi Minh City, Vietnam", "False"), ("Hanoi, Vietnam", "False"), ("Remote, Australia", "True"),
     ("Canberra, ACT, Australia", "False"), ("Perth, WA, Australia", "False")]
-sites = ["linkedin", "indeed", "google"]
+sites = ["linkedin", "indeed"]
 
 def slug(s, n=20):
     return re.sub(r"[^a-z0-9]+", "-", s.lower())[:n].strip("-")
@@ -56,7 +56,7 @@ with open(root / "jobs.csv", "w", newline="", encoding="utf-8") as f:
 (root / "scrape_config.json").write_text(json.dumps({
     "job": ["Data Scientist", "Machine Learning Engineer", "AI Engineer"],
     "location": ["Australia", "Vietnam"], "results_wanted": 20,
-    "site_name": ["linkedin", "indeed", "google"], "workers": 4,
+    "site_name": ["linkedin", "indeed"], "workers": 4,
     "title_exclude": ["Intern"], "exclude_companies": [],
 }, indent=2), encoding="utf-8")
 
@@ -71,7 +71,7 @@ hist.insert(2, {"status": "error", "started_at": (now - timedelta(days=12)).isof
     "new_jobs": None, "updated_jobs": None, "total_jobs": None, "error": "LinkedIn returned HTTP 429"})
 (root / "scrape_history.json").write_text(json.dumps(hist, indent=2), encoding="utf-8")
 (root / "scrape_status.json").write_text(json.dumps(hist[0], indent=2), encoding="utf-8")
-(root / "scrape.log").write_text("Scraping 'Data Scientist' in Australia (linkedin, indeed, google)\n"
+(root / "scrape.log").write_text("Scraping 'Data Scientist' in Australia (linkedin, indeed)\n"
     "Found 18 new jobs, updated 4\nSaved 88 jobs to jobs.csv\n", encoding="utf-8")
 
 (root / "cv.md").write_text("# Alex Example\n\nData scientist with 5 years of experience in applied machine learning.\n\n"

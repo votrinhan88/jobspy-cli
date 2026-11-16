@@ -6,6 +6,8 @@ import { STATUSES, isRemote, statusLabel } from "@/lib/status";
 import {
   DEFAULT_SORT,
   filterJobs,
+  formatLocation,
+  groupByLocation,
   sortJobs,
   statusCounts,
   type SortDir,
@@ -14,6 +16,7 @@ import {
 import { StatusMenu } from "@/components/status-menu";
 import { useChangeStatus } from "@/components/use-change-status";
 import { ResumeFit } from "@/app/jobs/_components/resume-fit";
+import { LocationGroupRow } from "@/app/jobs/_components/location-group-row";
 
 function formatSalary(job: Job): string | null {
   const min = job.min_amount ? parseFloat(job.min_amount) : null;
@@ -33,6 +36,8 @@ const COLUMNS: { key: SortKey; label: string }[] = [
   { key: "posted", label: "Posted" },
   { key: "status", label: "Status" },
 ];
+
+const TABLE_COLUMNS = COLUMNS.length + 2;
 
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -165,7 +170,7 @@ function JobDrawer({
           {job.location && (
             <div className="drawer-field">
               <span className="drawer-label">Location</span>
-              <span>{job.location}</span>
+              <span>{formatLocation(job)}</span>
             </div>
           )}
 
@@ -252,6 +257,7 @@ export default function JobsPage() {
   const [query, setQuery] = useState("");
   const [statuses, setStatuses] = useState<Set<JobStatus>>(new Set());
   const [remoteOnly, setRemoteOnly] = useState(false);
+  const [groupLocations, setGroupLocations] = useState(false);
   const [sort, setSort] = useState(DEFAULT_SORT);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const openerRef = useRef<HTMLElement | null>(null);
@@ -283,6 +289,10 @@ export default function JobsPage() {
     () => sortJobs(filterJobs(jobs, filters), sort.key, sort.dir),
     [jobs, filters, sort]
   );
+  const locationGroups = useMemo(
+    () => (groupLocations ? groupByLocation(visible) : null),
+    [groupLocations, visible]
+  );
   const selectedJob = selectedId ? jobs.find((j) => j.job_id === selectedId) ?? null : null;
 
   function openDrawer(job: Job, opener: HTMLElement) {
@@ -301,6 +311,36 @@ export default function JobsPage() {
       prev.key === key
         ? { key, dir: prev.dir === "asc" ? "desc" : "asc" }
         : { key, dir: key === "posted" ? "desc" : "asc" }
+    );
+  }
+
+  function renderJobRow(job: Job) {
+    const salary = formatSalary(job);
+    return (
+      <tr
+        key={job.job_id}
+        className={`job-row job-row--${job.status || "none"}${selectedId === job.job_id ? " job-row--selected" : ""}`}
+      >
+        <td className="job-title-cell" data-label="Title">
+          <button
+            type="button"
+            className="job-link"
+            onClick={(e) => openDrawer(job, e.currentTarget)}
+          >
+            {job.title || "—"}
+          </button>
+        </td>
+        <td className="job-company-cell" data-label="Company">{job.company || "—"}</td>
+        <td className="muted" data-label="Location">{formatLocation(job) || "—"}</td>
+        <td className="muted mono" data-label="Posted">{job.date_posted || "—"}</td>
+        <td data-label="Status"><StatusChip status={job.status} /></td>
+        <td className="cell-mobile-only salary-display" data-label="Salary">{salary || "—"}</td>
+        <td className="action-cell">
+          <div className="row-actions row-actions--end">
+            <TriageButtons job={job} busy={pending.has(job.job_id)} onChange={changeStatus} />
+          </div>
+        </td>
+      </tr>
     );
   }
 
@@ -380,6 +420,14 @@ export default function JobsPage() {
             >
               Remote only
             </button>
+            <button
+              type="button"
+              className="filter-chip"
+              aria-pressed={groupLocations}
+              onClick={() => setGroupLocations((g) => !g)}
+            >
+              Group by location
+            </button>
             <span className="count-badge" aria-live="polite">
               {visible.length} of {jobs.length} jobs
             </span>
@@ -421,35 +469,27 @@ export default function JobsPage() {
               </tr>
             </thead>
             <tbody>
-              {visible.map((job) => {
-                const salary = formatSalary(job);
-                return (
-                  <tr
-                    key={job.job_id}
-                    className={`job-row job-row--${job.status || "none"}${selectedId === job.job_id ? " job-row--selected" : ""}`}
-                  >
-                    <td className="job-title-cell" data-label="Title">
-                      <button
-                        type="button"
-                        className="job-link"
-                        onClick={(e) => openDrawer(job, e.currentTarget)}
-                      >
-                        {job.title || "—"}
-                      </button>
-                    </td>
-                    <td className="job-company-cell" data-label="Company">{job.company || "—"}</td>
-                    <td className="muted" data-label="Location">{job.location || "—"}</td>
-                    <td className="muted mono" data-label="Posted">{job.date_posted || "—"}</td>
-                    <td data-label="Status"><StatusChip status={job.status} /></td>
-                    <td className="cell-mobile-only salary-display" data-label="Salary">{salary || "—"}</td>
-                    <td className="action-cell">
-                      <div className="row-actions row-actions--end">
-                        <TriageButtons job={job} busy={pending.has(job.job_id)} onChange={changeStatus} />
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
+              {locationGroups
+                ? locationGroups.flatMap((country) => [
+                    <LocationGroupRow
+                      key={`country:${country.country}`}
+                      level="country"
+                      label={country.country}
+                      count={country.count}
+                      colSpan={TABLE_COLUMNS}
+                    />,
+                    ...country.regions.flatMap((region) => [
+                      <LocationGroupRow
+                        key={`region:${country.country}|${region.region}`}
+                        level="region"
+                        label={region.region}
+                        count={region.count}
+                        colSpan={TABLE_COLUMNS}
+                      />,
+                      ...region.jobs.map(renderJobRow),
+                    ]),
+                  ])
+                : visible.map(renderJobRow)}
             </tbody>
           </table>
         </div>

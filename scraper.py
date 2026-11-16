@@ -2,10 +2,12 @@ import csv
 import hashlib
 import os
 import re
+import warnings
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Lock
 
 from jobspy import scrape_jobs
+from jobspy.model import Country
 import pandas as pd
 
 from geocoder import Geocoder
@@ -49,7 +51,7 @@ class JobScraper:
         job: str | list[str],
         location: str | list[str],
         results_wanted: int = 10,
-        site_name: list = ["linkedin", "zip_recruiter", "indeed", "google"],  # "glassdoor" returns 400; blocked upstream (speedyapply/JobSpy#270)
+        site_name: list = ["linkedin", "zip_recruiter", "indeed"],  # "glassdoor" returns 400 (speedyapply/JobSpy#270); "google" returns no data (speedyapply/JobSpy#284)
         workers: int | None = None,
         overwrite: bool = False,
         title_include: list[str] | None = None,
@@ -65,7 +67,7 @@ class JobScraper:
         + `location`: Location(s) to search in.
         + `results_wanted`: Number of job results to fetch per search. Defaults to 10.
         + `site_name`: List of job sites to scrape from. Defaults to ["linkedin", "zip_recruiter",
-            "indeed", "google"].
+            "indeed"].
         + **`kwargs`: Additional keyword arguments passed to `scrape_jobs` (see bottom).
 
         Returns: pd.DataFrame containing the scraped job postings.
@@ -124,8 +126,39 @@ class JobScraper:
         df = self.filter_jobs(df, title_include=title_include, title_exclude=title_exclude, exclude_companies=exclude_companies)
         df = self._add_metadata(df)
         df = self._upsert(df, save_path, overwrite)
+        df = self.fill_regions(df)
         df.to_csv(save_path, index=False, quoting=csv.QUOTE_ALL)
         return df
+
+    def fill_regions(self, df: pd.DataFrame) -> pd.DataFrame:
+        # The region follows the stored location, which upsert never overwrites, so it is filled
+        # after the merge and only where it is empty.
+        if df.empty or "location" not in df.columns:
+            return df
+        df = df.copy()
+        if "region" not in df.columns:
+            df["region"] = ""
+        df["region"] = df["region"].fillna("").astype(str)
+        needs = df["region"] == ""
+        locations = df.loc[needs, "location"].fillna("").astype(str)
+        wanted = [loc for loc in dict.fromkeys(locations) if loc]
+        if not wanted:
+            return df
+        region_map = self._geocoder.get_region_map(wanted)
+        df.loc[needs, "region"] = locations.map(lambda loc: region_map.get(loc, ""))
+        return df
+
+    def backfill_regions(self, save_path: str) -> int:
+        try:
+            df = pd.read_csv(save_path, keep_default_na=False)
+        except (FileNotFoundError, pd.errors.EmptyDataError):
+            return 0
+        before = (df["region"] != "").sum() if "region" in df.columns else 0
+        filled = self.fill_regions(df)
+        after = (filled["region"] != "").sum() if "region" in filled.columns else 0
+        if after > before:
+            filled.to_csv(save_path, index=False, quoting=csv.QUOTE_ALL)
+        return int(after - before)
 
     # Fields preserved from the existing row on upsert (never overwritten by a new scrape).
     _PRESERVE_ON_UPSERT = {"status", "status_updated_at", "location", "job_id"}
@@ -189,10 +222,10 @@ class JobScraper:
                     new_rows.append(row)
             combined = existing_index.reset_index()
             if new_rows:
-                combined = pd.concat([combined, pd.DataFrame(new_rows)], ignore_index=True)
+                combined = self._concat([combined, pd.DataFrame(new_rows)])
         else:
             dedup_cols = [c for c in ["title", "company", "location", "date_posted"] if c in df.columns and c in existing.columns]
-            combined = pd.concat([existing, df], ignore_index=True)
+            combined = self._concat([existing, df])
             combined = combined.drop_duplicates(subset=dedup_cols, keep="first")
 
         combined = combined.reset_index(drop=True)
@@ -201,10 +234,31 @@ class JobScraper:
         return combined
 
     @staticmethod
+    def _concat(frames: list) -> pd.DataFrame:
+        # Boards without salary or email data give all-NA columns. Pandas warns about the dtype change that
+        # will come, but those columns only go to CSV, so the old behaviour is fine.
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", FutureWarning)
+            return pd.concat(frames, ignore_index=True)
+
+    @staticmethod
+    def _country_of(location: str) -> str | None:
+        # Indeed searches the USA unless it gets a country, so a search for "Vietnam" returned Puerto Rico.
+        last = location.split(",")[-1].strip()
+        try:
+            return Country(last).value
+        except ValueError:
+            return None
+
+    @staticmethod
     def _has_text(value) -> bool:
         return pd.notna(value) and str(value).strip() != ""
 
     def _scrape_pair(self, job: str, location: str, site_name: list, results_wanted: int, **kwargs) -> pd.DataFrame:
+        if "country_indeed" not in kwargs:
+            country = self._country_of(location)
+            if country:
+                kwargs["country_indeed"] = country
         df = scrape_jobs(
             site_name=site_name,
             search_term=job,
@@ -249,12 +303,13 @@ class JobScraper:
         return df
 
     def merge(self, all_jobs: list[pd.DataFrame]) -> pd.DataFrame:
-        df = pd.concat(all_jobs, ignore_index=True)
+        df = self._concat(all_jobs)
         if df.empty:
             return df
         prev_len = len(df)
         groupby_cols = [c for c in ["title", "company", "location", "date_posted"] if c in df.columns]
-        df = df.groupby(groupby_cols, as_index=False).first()
+        # dropna=False keeps jobs with an empty key such as a missing date. sort=False keeps the board order.
+        df = df.groupby(groupby_cols, as_index=False, dropna=False, sort=False).first()
         if self.verbose > 0:
             print(f"Remove duplicates: {prev_len} --> {len(df)} unique jobs")
 

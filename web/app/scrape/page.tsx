@@ -5,6 +5,7 @@ import type { ScrapeConfig } from "@/lib/config";
 import type { ScrapeStatus } from "@/lib/scrape-status";
 import { ScheduleSelect } from "@/app/scrape/_components/schedule-select";
 import { FetchDescriptionOption } from "@/app/scrape/_components/fetch-description-option";
+import { JobspyUpdateNotice } from "@/app/scrape/_components/jobspy-update-notice";
 
 function formatDuration(started: string | null, finished: string | null): string {
   if (!started || !finished) return "—";
@@ -73,7 +74,7 @@ function RunHistory() {
 const SITES: { id: string; label: string; blocked?: string }[] = [
   { id: "linkedin",      label: "LinkedIn" },
   { id: "indeed",        label: "Indeed" },
-  { id: "google",        label: "Google Jobs" },
+  { id: "google",        label: "Google Jobs", blocked: "Blocked upstream — Google shows job results only to browsers (speedyapply/JobSpy#284)" },
   { id: "zip_recruiter", label: "ZipRecruiter" },
   { id: "glassdoor",     label: "Glassdoor", blocked: "Blocked upstream — HTTP 400 from JobSpy (speedyapply/JobSpy#270)" },
 ];
@@ -391,6 +392,7 @@ export default function ScrapePage() {
         </div>
       </header>
 
+      <JobspyUpdateNotice />
       <StatusBanner status={status} />
       {runError && <div className="alert alert-error">{runError}</div>}
       {isRunning && <ScrapeProgress log={log} isRunning={isRunning} />}

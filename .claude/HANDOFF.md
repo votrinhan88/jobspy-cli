@@ -1,7 +1,7 @@
 # Handoff - jobspy-cli (session 9 wrap-up)
 
 **Date:** 2026-11-03
-**Branch:** `main`, 33 commits ahead of `origin/main`. Not pushed. The user said not to push.
+**Branch:** `main`, 40 commits ahead of `origin/main`. Not pushed. The user said not to push.
 
 ## State
 
@@ -13,6 +13,10 @@
 - Contact bars in the old template are moot now (the builder is removed).
 - JobSpy is updated to 1.4.1. `--fetch_description` replaces `--linkedin_fetch_description` (the old flag stays as an alias). The config field is still `fetch_linkedin_description`.
 - Verified at the last commit: 349 Vitest tests (37 files), 70 Python tests, `tsc`, `pnpm lint`, `pnpm build` all clean. A live check on a throwaway profile: PDF import, text extraction, file route, keyword match (88%) and the submitted record.
+
+- Location tiers: new `region` column (geocoder, `data/.regioncache.json`), Location sort by country, region, city, and a "Group by location" toggle on the Jobs page. Google Jobs is disabled (returns no data without a browser, JobSpy#284).
+- On 2026-11-03 the user had all `jobs.csv` and `status_log.jsonl` files deleted in profiles `votrinhan88` and `sample` (dev phase), then a small scrape ran on `votrinhan88` (10 jobs, 2 regions). Resumes and configs are untouched.
+- Requested, not built yet: a warning on the Scrape page only when the installed python-jobspy is older than the latest PyPI release.
 
 ## Open work
 

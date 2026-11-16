@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Job, JobStatus } from "@/lib/csv";
-import { DEFAULT_SORT, filterJobs, sortJobs, statusCounts } from "@/lib/jobs-view";
+import { DEFAULT_SORT, filterJobs, formatLocation, groupByLocation, sortJobs, splitLocation, statusCounts } from "@/lib/jobs-view";
 
 function j(id: string, fields: Partial<Record<string, string>> = {}): Job {
   return {
@@ -114,5 +114,156 @@ describe("filterJobs", () => {
     const remote = statusCounts(jobs, { ...none, remoteOnly: true });
     expect(remote.all).toBe(2);
     expect(remote.skipped).toBe(1);
+  });
+});
+
+describe("splitLocation", () => {
+  it("takes the country from the last part, the city from the first part and the region from the region column", () => {
+    expect(splitLocation(j("1", { location: "Sydney, Australia", region: "New South Wales" }))).toEqual({
+      country: "Australia",
+      region: "New South Wales",
+      city: "Sydney",
+    });
+  });
+
+  it("trims spaces and handles a location with more than two parts", () => {
+    expect(splitLocation(j("1", { location: " Surry Hills ,  Sydney , Australia " }))).toEqual({
+      country: "Australia",
+      region: "",
+      city: "Surry Hills",
+    });
+  });
+
+  it("treats a single part as the country", () => {
+    expect(splitLocation(j("1", { location: "Australia" }))).toEqual({ country: "Australia", region: "", city: "" });
+  });
+
+  it("returns empty parts for an empty location or a job without a region column", () => {
+    expect(splitLocation(j("1"))).toEqual({ country: "", region: "", city: "" });
+  });
+});
+
+describe("sortJobs by location tiers", () => {
+  const jobs = [
+    j("syd", { location: "Sydney, Australia", region: "New South Wales" }),
+    j("mel", { location: "Melbourne, Australia", region: "Victoria" }),
+    j("han", { location: "Hà Nội, Việt Nam", region: "Hà Nội" }),
+    j("new", { location: "Newcastle, Australia", region: "New South Wales" }),
+    j("car", { location: "Carlton, Australia", region: "Victoria" }),
+    j("none"),
+  ];
+
+  it("sorts by country, then region, then city, and puts empty locations last", () => {
+    expect(ids(sortJobs(jobs, "location", "asc"))).toEqual(["new", "syd", "car", "mel", "han", "none"]);
+  });
+
+  it("reverses the tiers in descending order and keeps empty locations last", () => {
+    expect(ids(sortJobs(jobs, "location", "desc"))).toEqual(["han", "mel", "car", "syd", "new", "none"]);
+  });
+
+  it("puts a job without a region after the jobs with a region inside the same country", () => {
+    const mixed = [
+      j("a", { location: "Perth, Australia", region: "" }),
+      j("b", { location: "Sydney, Australia", region: "New South Wales" }),
+    ];
+    expect(ids(sortJobs(mixed, "location", "asc"))).toEqual(["b", "a"]);
+  });
+
+  it("ignores case", () => {
+    const mixed = [j("a", { location: "x, australia" }), j("b", { location: "y, Austria" }), j("c", { location: "z, Australia" })];
+    expect(ids(sortJobs(mixed, "location", "asc"))).toEqual(["a", "c", "b"]);
+  });
+});
+
+describe("groupByLocation", () => {
+  const jobs = [
+    j("mel", { location: "Melbourne, Australia", region: "Victoria" }),
+    j("han", { location: "Hà Nội, Việt Nam", region: "Hà Nội" }),
+    j("syd", { location: "Sydney, Australia", region: "New South Wales" }),
+    j("car", { location: "Carlton, Australia", region: "Victoria" }),
+    j("per", { location: "Perth, Australia" }),
+    j("none"),
+  ];
+  const groups = groupByLocation(jobs);
+
+  it("lists countries alphabetically with the unknown group last, each with a job count", () => {
+    expect(groups.map((g) => [g.country, g.count])).toEqual([
+      ["Australia", 4],
+      ["Việt Nam", 1],
+      ["", 1],
+    ]);
+  });
+
+  it("lists regions alphabetically inside a country with the job count and puts jobs without a region last", () => {
+    const australia = groups[0];
+    expect(australia.regions.map((r) => [r.region, r.count])).toEqual([
+      ["New South Wales", 1],
+      ["Victoria", 2],
+      ["", 1],
+    ]);
+  });
+
+  it("keeps the order of the input jobs inside a region", () => {
+    expect(ids(groups[0].regions[1].jobs)).toEqual(["mel", "car"]);
+  });
+
+  it("returns an empty list for no jobs and never drops or repeats a job", () => {
+    expect(groupByLocation([])).toEqual([]);
+    const all = groups.flatMap((g) => g.regions.flatMap((r) => r.jobs));
+    expect(ids(all).sort()).toEqual(ids(jobs).sort());
+  });
+});
+
+describe("formatLocation", () => {
+  it("shows country, region and city, widest place first", () => {
+    expect(formatLocation(j("1", { location: "Melbourne, Australia", region: "Victoria" }))).toBe(
+      "Australia, Victoria, Melbourne"
+    );
+  });
+
+  it("shows the stored location when there is no region", () => {
+    expect(formatLocation(j("1", { location: "Melbourne, Australia" }))).toBe("Australia, Melbourne");
+    expect(formatLocation(j("1", { location: "Melbourne, Australia", region: "  " }))).toBe("Australia, Melbourne");
+  });
+
+  it("does not repeat a region that is already part of the location, in any letter case", () => {
+    expect(formatLocation(j("1", { location: "Hà Nội, Việt Nam", region: "Hà Nội" }))).toBe("Việt Nam, Hà Nội");
+    expect(formatLocation(j("1", { location: "Victoria, Australia", region: "victoria" }))).toBe("Australia, Victoria");
+    expect(formatLocation(j("1", { location: "Singapore, Singapore", region: "Singapore" }))).toBe("Singapore, Singapore");
+  });
+
+  it("does not repeat a region whose name contains a stored part, such as a Vietnamese city prefix", () => {
+    expect(formatLocation(j("1", { location: "Hà Nội, Việt Nam", region: "Thành phố Hà Nội" }))).toBe("Việt Nam, Hà Nội");
+    expect(
+      formatLocation(j("1", { location: "Ấp Củ Chi, Việt Nam", region: "Thành phố Hồ Chí Minh" }))
+    ).toBe("Việt Nam, Thành phố Hồ Chí Minh, Ấp Củ Chi");
+  });
+
+  it("keeps a region that only contains the country name", () => {
+    expect(
+      formatLocation(j("1", { location: "Canberra, Australia", region: "Australian Capital Territory" }))
+    ).toBe("Australia, Australian Capital Territory, Canberra");
+  });
+
+  it("keeps every stored part and puts the country first, then the region, then the stored places from wide to narrow", () => {
+    expect(formatLocation(j("1", { location: "Surry Hills, Sydney, Australia", region: "New South Wales" }))).toBe(
+      "Australia, New South Wales, Sydney, Surry Hills"
+    );
+  });
+
+  it("puts the region after a country that stands alone", () => {
+    expect(formatLocation(j("1", { location: "Australia", region: "Victoria" }))).toBe("Australia, Victoria");
+  });
+
+  it("returns an empty text for an empty location", () => {
+    expect(formatLocation(j("1"))).toBe("");
+    expect(formatLocation(j("1", { region: "Victoria" }))).toBe("");
+  });
+});
+
+describe("filterJobs query and region", () => {
+  it("matches the region too", () => {
+    const jobs = [j("a", { location: "Melbourne, Australia", region: "Victoria" }), j("b", { location: "Perth, Australia" })];
+    expect(ids(filterJobs(jobs, { ...none, query: "victoria" }))).toEqual(["a"]);
   });
 });

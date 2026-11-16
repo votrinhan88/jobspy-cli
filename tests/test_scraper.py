@@ -84,6 +84,49 @@ class TestMerge:
         result = scraper.merge([pd.DataFrame(), pd.DataFrame()])
         assert result.empty
 
+    def test_all_na_columns_do_not_raise_a_future_warning(self, scraper, mocker):
+        import warnings
+
+        mocker.patch.object(scraper, "get_location_map", return_value={"Sydney, Australia": "Sydney, Australia"})
+        priced = make_df().assign(min_amount=10.0, emails="a@b.c")
+        sparse = make_df(
+            title=["ML Engineer"], company=["Beta"], job_url=["https://example.com/job/2"]
+        ).assign(min_amount=None, emails=None)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            result = scraper.merge([pd.DataFrame(), priced, sparse])
+        assert len(result) == 2
+        assert "min_amount" in result.columns
+
+    def test_keeps_a_job_without_a_posted_date(self, scraper, mocker):
+        mocker.patch.object(scraper, "get_location_map", return_value={"Sydney, Australia": "Sydney, Australia"})
+        df = pd.concat(
+            [
+                make_df(),
+                make_df(title=["No date"], job_url=["https://example.com/job/2"], date_posted=[None]),
+            ],
+            ignore_index=True,
+        )
+        result = scraper.merge([df])
+        assert sorted(result["title"]) == ["AI Engineer", "No date"]
+
+    def test_keeps_the_order_in_which_the_boards_returned_the_jobs(self, scraper, mocker):
+        mocker.patch.object(scraper, "get_location_map", return_value={"Sydney, Australia": "Sydney, Australia"})
+        titles = ["Zebra", "Mango", "Apple"]
+        df = make_df(
+            title=titles,
+            company=["a", "b", "c"],
+            location=["Sydney, Australia"] * 3,
+            date_posted=["2026-08-27"] * 3,
+            job_url=["u1", "u2", "u3"],
+            interval=["yearly"] * 3,
+            min_amount=[1] * 3,
+            max_amount=[2] * 3,
+            currency=["AUD"] * 3,
+            is_remote=[False] * 3,
+        )
+        assert list(scraper.merge([df])["title"]) == titles
+
     def test_deduplicates_identical_rows(self, scraper, mocker):
         mocker.patch.object(scraper, "get_location_map", return_value={"Sydney, Australia": "Sydney, Australia"})
         df = make_df()
@@ -606,3 +649,50 @@ class TestUpsertPreservesMetadata:
         result = scraper._upsert(updated, save_path, overwrite=False)
         assert result["status"].iloc[0] == "applied"
         assert result["status_updated_at"].iloc[0] == "2026-08-27T08:00:00"
+
+
+class TestDefaultSites:
+    def test_google_is_not_in_the_default_sites(self):
+        import inspect
+
+        default = inspect.signature(JobScraper.__call__).parameters["site_name"].default
+        assert "google" not in default
+        assert {"linkedin", "indeed"} <= set(default)
+
+
+class TestIndeedCountry:
+    def country_passed(self, scraper, mocker, location, **kwargs):
+        spy = mocker.patch("scraper.scrape_jobs", return_value=make_df())
+        mocker.patch.object(scraper, "clean_job_list", side_effect=lambda df: df)
+        scraper._scrape_pair("AI Engineer", location, ["indeed"], 5, **kwargs)
+        return spy.call_args[1].get("country_indeed")
+
+    def test_a_country_location_sets_the_indeed_country(self, scraper, mocker):
+        assert self.country_passed(scraper, mocker, "Vietnam") == "vietnam"
+        assert self.country_passed(scraper, mocker, "Australia") == "australia"
+
+    def test_the_last_part_of_a_location_is_the_country(self, scraper, mocker):
+        assert self.country_passed(scraper, mocker, "Sydney, Australia") == "australia"
+
+    def test_country_aliases_work(self, scraper, mocker):
+        assert self.country_passed(scraper, mocker, "United States") == "usa"
+        assert self.country_passed(scraper, mocker, "United Kingdom") == "uk"
+
+    def test_a_location_that_is_not_a_country_sets_nothing(self, scraper, mocker):
+        assert self.country_passed(scraper, mocker, "Sydney") is None
+
+    def test_an_explicit_country_wins(self, scraper, mocker):
+        assert self.country_passed(scraper, mocker, "Vietnam", country_indeed="usa") == "usa"
+
+
+class TestUpsertFutureWarning:
+    def test_adding_a_row_with_all_na_columns_raises_no_future_warning(self, scraper, tmp_path):
+        import warnings
+
+        path = tmp_path / "jobs.csv"
+        make_df(job_id=["a"], status=[""], status_updated_at=[""], emails=["x@y.z"]).to_csv(path, index=False)
+        new = make_df(job_url=["https://example.com/job/2"], job_id=["b"], status=[""], status_updated_at=[""], emails=[None], min_amount=[None], max_amount=[None])
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            result = scraper._upsert(new, str(path), overwrite=False)
+        assert len(result) == 2
