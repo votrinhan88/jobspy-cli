@@ -2,6 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { Job } from "@/lib/csv";
+import type { StatusLogEntry } from "@/lib/status-log";
+import { buildSankey } from "@/lib/sankey";
+import { SankeyChart } from "@/components/sankey-chart";
 import {
   computeStatistics,
   STATUS_ORDER,
@@ -10,6 +13,7 @@ import {
 
 export default function StatisticsPage() {
   const [jobs, setJobs] = useState<Job[]>([]);
+  const [log, setLog] = useState<StatusLogEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [noProfile, setNoProfile] = useState(false);
@@ -27,6 +31,8 @@ export default function StatisticsPage() {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data: Job[] = await res.json();
         setJobs(data);
+        const logRes = await fetch("/api/jobs/log");
+        if (logRes.ok) setLog((await logRes.json()) as StatusLogEntry[]);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to load statistics");
       } finally {
@@ -37,6 +43,7 @@ export default function StatisticsPage() {
   }, []);
 
   const stats: Statistics = useMemo(() => computeStatistics(jobs), [jobs]);
+  const flow = useMemo(() => buildSankey(log), [log]);
 
   if (noProfile) {
     return (
@@ -80,6 +87,13 @@ export default function StatisticsPage() {
           <section className="section">
             <h2 className="section-title">Pipeline</h2>
             <PipelineFunnel stats={stats} />
+          </section>
+          <section className="section">
+            <h2 className="section-title">Flow</h2>
+            <SankeyChart graph={flow} />
+            <p className="section-note">
+              Moves between stages since tracking started. Backward moves are not shown.
+            </p>
           </section>
           <section className="section">
             <h2 className="section-title">Timeline</h2>

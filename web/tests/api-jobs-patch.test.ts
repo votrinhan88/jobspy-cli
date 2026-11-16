@@ -65,7 +65,7 @@ function patch(jobId: string, body: unknown) {
 }
 
 describe("PATCH /api/jobs/[jobId]", () => {
-  it("accepts every ordered pair of statuses, including from and to the empty status (7 by 7)", async () => {
+  it("accepts every ordered pair of statuses, including from and to the empty status (8 by 8)", async () => {
     let pairs = 0;
     for (const from of STATUSES) {
       for (const to of STATUSES) {
@@ -76,7 +76,7 @@ describe("PATCH /api/jobs/[jobId]", () => {
         pairs++;
       }
     }
-    expect(pairs).toBe(49);
+    expect(pairs).toBe(STATUSES.length * STATUSES.length);
   }, 30000);
 
   it("sets the status to empty and updates the timestamp", async () => {
@@ -151,12 +151,11 @@ describe("PATCH /api/jobs/[jobId]", () => {
     ]);
   });
 
-  it("an undo appends a second line and does not remove the first", async () => {
-    const first = await (await patch("b-2", { status: "interview" })).json();
+  it("an undo writes no line and rewrites the job's history to end at the restored stage", async () => {
+    await patch("b-2", { status: "interview" });
     await patch("b-2", { status: "applied", status_updated_at: "2026-09-01T10:00:00.000Z" });
     expect(await readStatusLog("demo")).toEqual([
-      { job_id: "b-2", from: "applied", to: "interview", at: first.status_updated_at },
-      { job_id: "b-2", from: "interview", to: "applied", at: "2026-09-01T10:00:00.000Z" },
+      { job_id: "b-2", from: "", to: "applied", at: "2026-09-01T10:00:00.000Z" },
     ]);
   });
 

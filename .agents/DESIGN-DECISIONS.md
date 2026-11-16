@@ -235,3 +235,30 @@ For full UI conventions and page specs, see `.agents/SPEC.md`.
 - **Ties break on the posted date, newest first** - one scrape stamps many rows with the same `last_seen_at`, so sorting on the timestamp alone leaves a large block unchanged. The posted date gives each row a second, visible key.
 - **The tie-break does not follow the sort direction** - the reader clicked Last seen, not Posted. Newest posting first inside each timestamp block is the useful order in both directions.
 - **Rows with no sighting stay last** - unknown is not older or newer, so it cannot join the order.
+
+## 2026-11-05 - Kanban Drag and Drop
+
+- **Drag on the kanban, keep the menu in the table** - a mouse drag is the shortest path between two columns, so the cards drop their buttons. The table and the Jobs drawer keep the status menu, which stays the keyboard path.
+- **Drop target highlights, the card does not move early** - the card stays in its column until the PATCH returns. A card that jumps and then fails would lie about the state.
+- **No separate drop zone for the archive** - the Rejected board uses the same column component, so a card can be dropped there too.
+- **Touch has no drag path** - HTML5 drag events do not fire on touch screens, so the table view stays the way to move a card on a phone.
+
+## 2026-11-05 - Application Flow Sankey
+
+- **Statistics, not an Applications view** - the Flow card is a read-only summary, and the Statistics page already owns the pipeline and timeline. Applications keeps its three working views.
+- **Forward moves only** - a Sankey is acyclic. Backward moves (Interview to Applied) break the layout, so they are dropped and the card says so.
+- **Skipped is not a stage** - it is an archive action, so the chart ignores it. Untriaged is a stage because every first move comes from it.
+- **One extra dependency** - `d3-sankey` handles node stacking, link widths and label collision. A custom layout would be more code and more edge cases for the same picture.
+- **The log read does not gate the page** - the card degrades to its empty text; Statistics still shows the rest.
+
+## 2026-11-05 - Sankey Bands and Counts
+
+- **Fixed pixels per move, not a stretched layout** - d3-sankey fills the extent it is given, so three moves looked like three full-height blocks. A capped unit (28 px) keeps a move readable at any count, and the chart height follows the data.
+- **The dependency went away** - the custom layout is smaller than the configuration it replaced, and it makes label placement and counts straightforward. `d3-sankey` was removed. The earlier entry still explains why it was tried first.
+- **Every flow prints its count** - a Sankey without numbers asks the reader to compare widths on sight. The count sits in a small pill at the link midpoint; the node pill carries the stage total.
+- **Stage labels sit above the bars** - beside the bar, the label collided with the next flow and with the right edge.
+
+## 2026-11-05 - Sankey Labels in a Header Row
+
+- **Labels leave the plot** - beside a bar or above it, a stage label landed on a flow that enters a later stage. A fixed header row per column cannot collide with a band.
+- **Skipped-column counts move left** - a flow from column 1 to column 3 has its midpoint on column 2's bar. The count sits at 32% of the curve, where no bar is.

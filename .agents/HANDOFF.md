@@ -1,7 +1,7 @@
 # Handoff - jobspy-cli (New marker)
 
 **Date:** 2026-11-04
-**Branch:** `main`. 116 commits ahead of `origin/main`. Not pushed. The user said not to push.
+**Branch:** `main`. 128 commits ahead of `origin/main`. Not pushed. The user said not to push.
 
 ## State
 
@@ -32,10 +32,27 @@
 - Skip moves a job to Archived. Restore sets the status back to Untriaged.
 - Applications shows rejected jobs in the Rejected section.
 - The first real scrape after the lifecycle change ran on 2026-11-04. `jobs.csv` now has the lifecycle columns and 262 rows: 4 rows added, one of them a duplicate, so `new_jobs` is 3. The 132 matched old rows got `last_seen_at` only; no old row got `first_seen_at`. The New chip shows 3.
+- Statistics has a Flow Sankey of forward status moves from `status_log.jsonl`, with a count on every flow and stage labels in a header row. Bands use a fixed 28 px per move and the chart height follows the counts. Backward moves and skipped are not drawn.
+- Kanban cards drag between columns to change status; the card buttons are gone. The table view keeps the status menu, which is the keyboard and touch path.
 - The scrape spawn uses `.venv/Scripts/pythonw.exe` on Windows, a GUI subsystem binary, so no console window opens. `windowsHide: true` stays as a second guard. The Jobs body cells now follow the header order: Status before Last seen.
 
 Recent commits:
 
+- `fix: keep sankey labels clear of the flows`
+- `docs: record the sankey bands`
+- `chore: drop the unused d3-sankey dependency`
+- `feat: show the count on every flow`
+- `fix: size sankey bands to the counts`
+- `docs: record the sankey handoff`
+- `docs: record the application flow sankey`
+- `feat: show the application flow on statistics`
+- `feat: draw the application flow sankey`
+- `feat: lay out the application flow with d3-sankey`
+- `feat: count application moves for a sankey`
+- `docs: plan the application flow sankey`
+- `docs: record the kanban drag handoff`
+- `docs: record the kanban drag and drop`
+- `feat: drag kanban cards between application stages`
 - `docs: record the tie-break handoff`
 - `docs: record the last-seen tie-break`
 - `fix: break last-seen ties by posted date`
@@ -59,7 +76,7 @@ Recent commits:
 Gate used for this change:
 
 - `./.venv/Scripts/python.exe -m pytest -q` -> 301 passed
-- `cd web && CI=true pnpm test` -> 533 passed
+- `cd web && CI=true pnpm test` -> 557 passed
 - `cd web && pnpm exec tsc --noEmit` -> clean
 - `cd web && CI=true pnpm lint` -> clean
 - `cd web && CI=true pnpm build` -> clean

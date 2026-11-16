@@ -1,5 +1,6 @@
 import type { Job, JobStatus } from "@/lib/csv";
 import { facetValueLabel, type FacetKey } from "@/lib/facets";
+import { formatLocation } from "@/lib/jobs-view";
 import { STATUSES, isActiveStatus, isArchivedStatus, isRemote } from "@/lib/status";
 
 export const STATUS_ORDER: JobStatus[] = STATUSES.filter((s) => s !== "");
@@ -98,7 +99,7 @@ export function computeStatistics(jobs: Job[]): Statistics {
     perStatus,
     timeline,
     topCompanies: topCounts(jobs.map((j) => j.company), 6),
-    topLocations: topCounts(jobs.map((j) => j.location), 6),
+    topLocations: topCounts(jobs.map((j) => formatLocation(j)), 6),
     facets: {
       countries: topCounts(jobs.map((j) => j.country), 6),
       cities: topCounts(jobs.map((j) => j.city), 6),

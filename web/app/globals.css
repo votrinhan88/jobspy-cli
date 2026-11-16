@@ -662,6 +662,12 @@ nextjs-portal {
 
 /* ── Empty state ────────────────────────────────────────────────────────── */
 
+.section-note {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--app-ink-muted);
+}
+
 .empty-state {
   font-size: 14px;
   color: var(--app-ink-muted);
@@ -918,6 +924,12 @@ nextjs-portal {
 }
 
 .status-chip--offer {
+  background: #6b7280;
+  color: #ffffff;
+  border-color: #6b7280;
+}
+
+.status-chip--accepted {
   background: color-mix(in srgb, #059669 10%, transparent);
   color: #047857;
   border-color: color-mix(in srgb, #059669 25%, transparent);
@@ -946,7 +958,7 @@ nextjs-portal {
   :root:not([data-theme="light"]) .status-chip--interview {
     color: #fcd34d;
   }
-  :root:not([data-theme="light"]) .status-chip--offer {
+  :root:not([data-theme="light"]) .status-chip--accepted {
     color: #6ee7b7;
   }
   :root:not([data-theme="light"]) .status-chip--rejected {
@@ -957,7 +969,7 @@ nextjs-portal {
 :root[data-theme="dark"] .status-chip--shortlisted { color: #93c5fd; }
 :root[data-theme="dark"] .status-chip--applied { color: #c4b5fd; }
 :root[data-theme="dark"] .status-chip--interview { color: #fcd34d; }
-:root[data-theme="dark"] .status-chip--offer { color: #6ee7b7; }
+:root[data-theme="dark"] .status-chip--accepted { color: #6ee7b7; }
 :root[data-theme="dark"] .status-chip--rejected { color: #fca5a5; }
 
 /* ── Scrape status banner ───────────────────────────────────────────────── */
@@ -1170,6 +1182,11 @@ nextjs-portal {
   border-top: 1px solid var(--app-border);
 }
 
+.kanban-col--over {
+  box-shadow: inset 0 0 0 2px var(--app-accent);
+  background: color-mix(in srgb, var(--app-accent) 6%, var(--app-panel));
+}
+
 .kanban-col {
   background: var(--app-panel);
   border: 1px solid var(--app-border);
@@ -1208,7 +1225,69 @@ nextjs-portal {
   background: var(--app-panel);
 }
 
+/* ── Sankey ─────────────────────────────────────────────────────────────── */
+
+.sankey {
+  width: 100%;
+  height: auto;
+  display: block;
+  font-family: var(--app-font);
+}
+
+.sankey-link {
+  fill: none;
+  stroke: var(--app-accent);
+  stroke-opacity: 0.45;
+}
+
+.sankey-link--shortlisted { stroke: #2563eb; }
+.sankey-link--applied { stroke: #7c3aed; }
+.sankey-link--interview { stroke: #d97706; }
+.sankey-link--offer { stroke: #059669; }
+.sankey-link--accepted { stroke: #0d9488; }
+.sankey-link--rejected { stroke: #dc2626; }
+.sankey-link--skipped { stroke: #6b7280; }
+
+.sankey-node {
+  fill: var(--app-accent);
+}
+
+.sankey-node--shortlisted { fill: #2563eb; }
+.sankey-node--applied { fill: #7c3aed; }
+.sankey-node--interview { fill: #d97706; }
+.sankey-node--offer { fill: #059669; }
+.sankey-node--accepted { fill: #0d9488; }
+.sankey-node--rejected { fill: #dc2626; }
+.sankey-node--skipped { fill: #6b7280; }
+
+.sankey-label {
+  font-size: 12px;
+  font-weight: 500;
+  fill: var(--app-ink);
+}
+
+.sankey-count {
+  font-size: 11px;
+  font-weight: 600;
+  fill: var(--app-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.sankey-count-bg {
+  fill: var(--app-panel);
+  stroke: var(--app-border);
+  stroke-width: 1;
+}
+
 /* ── Job card ───────────────────────────────────────────────────────────── */
+
+.job-card[draggable="true"] {
+  cursor: grab;
+}
+
+.job-card[draggable="true"]:active {
+  cursor: grabbing;
+}
 
 .job-card {
   background: var(--app-panel);

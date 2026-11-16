@@ -52,6 +52,10 @@ function sortValue(job: Job, key: keyof typeof FIELD | "status"): string | numbe
   return (job[FIELD[key]] ?? "").trim().toLowerCase();
 }
 
+// Vietnamese addresses put the administrative rank in front of the name. The same rule drops
+// it from the city facet in facets.py, so the region and the city read the same way.
+const RANK_PREFIX = /^\s*(?:thành\s+phố|tp\.?)\s+/i;
+
 export function splitLocation(job: Job): LocationParts {
   const parts = (job.location ?? "")
     .split(",")
@@ -59,20 +63,21 @@ export function splitLocation(job: Job): LocationParts {
     .filter(Boolean);
   return {
     country: parts.length > 0 ? parts[parts.length - 1] : "",
-    region: (job.region ?? "").trim(),
+    region: (job.region ?? "").trim().replace(RANK_PREFIX, "").trim(),
     city: parts.length >= 2 ? parts[0] : "",
   };
 }
 
 // Display only: the stored location stays "City, Country" because upsert never rewrites it.
 // The order is widest place first, the same as the tiers of the Location sort and the group headers.
+// The Jobs, Applications, Archived and Statistics pages all show this label.
 export function formatLocation(job: Job): string {
   const parts = (job.location ?? "")
     .split(",")
     .map((part) => part.trim())
     .filter(Boolean);
   if (parts.length === 0) return "";
-  const region = (job.region ?? "").trim();
+  const region = splitLocation(job).region;
   const lowerRegion = region.toLowerCase();
   // A place part inside the region name counts as a repeat, as in "Hà Nội" and "Thành phố Hà Nội".
   // The country must match exactly, because "Australian Capital Territory" contains "Australia".

@@ -7,6 +7,7 @@ export const STATUSES: readonly JobStatus[] = [
   "applied",
   "interview",
   "offer",
+  "accepted",
   "rejected",
   "skipped",
 ];
@@ -17,6 +18,7 @@ const LABELS: Record<JobStatus, string> = {
   applied: "Applied",
   interview: "Interview",
   offer: "Offer",
+  accepted: "Accepted",
   rejected: "Rejected",
   skipped: "Skipped",
 };
@@ -34,7 +36,7 @@ export function isActiveStatus(status: string): boolean {
 }
 
 export function isArchivedStatus(status: string): boolean {
-  return status === "rejected" || status === "skipped";
+  return status === "accepted" || status === "rejected" || status === "skipped";
 }
 
 export function isSkippedStatus(status: string): boolean {

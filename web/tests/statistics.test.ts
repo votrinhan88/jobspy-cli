@@ -69,6 +69,17 @@ describe("computeStatistics", () => {
     ]);
   });
 
+  it("lists the top locations with the same label as the Jobs table", () => {
+    const stats = computeStatistics([
+      { job_id: "1", status: "", is_remote: "False", company: "c", location: "Ấp Củ Chi, Việt Nam", region: "Thành phố Hồ Chí Minh", country: "Việt Nam", city: "Ấp Củ Chi" } as unknown as Job,
+      { job_id: "2", status: "", is_remote: "False", company: "c", location: "Sydney, Australia", region: "New South Wales", country: "Australia", city: "Sydney" } as unknown as Job,
+    ]);
+    expect(stats.topLocations).toEqual([
+      { name: "Việt Nam, Hồ Chí Minh, Ấp Củ Chi", count: 1 },
+      { name: "Australia, New South Wales, Sydney", count: 1 },
+    ]);
+  });
+
   it("remote count uses the shared isRemote", () => {
     const mixed = [
       ...jobs([["", 1]], "True"),

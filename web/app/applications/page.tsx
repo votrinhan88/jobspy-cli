@@ -167,12 +167,27 @@ function KanbanView({
 }) {
   const active = COLUMNS.filter((s) => !isArchivedStatus(s));
   const archive = COLUMNS.filter((s) => isArchivedStatus(s) && isTrackedStatus(s));
+  const byId = new Map<string, Job>();
+  for (const list of Object.values(byStatus)) {
+    for (const job of list) byId.set(job.job_id, job);
+  }
+
+  function dropJob(jobId: string, status: JobStatus) {
+    const job = byId.get(jobId);
+    if (job && job.status !== status) onChange(job, status);
+  }
 
   return (
     <div>
       <div className="kanban-board" aria-label="Active applications">
         {active.map((col) => (
-          <KanbanColumn key={col} status={col} jobs={byStatus[col]} pending={pending} onChange={onChange} />
+          <KanbanColumn
+            key={col}
+            status={col}
+            jobs={byStatus[col]}
+            pending={pending}
+            onDropJob={(jobId) => dropJob(jobId, col)}
+          />
         ))}
       </div>
       {archive.some((s) => byStatus[s].length > 0) && (
@@ -180,7 +195,13 @@ function KanbanView({
           <p className="section-title">Rejected</p>
           <div className="kanban-board kanban-board--archive" aria-label="Rejected applications">
             {archive.map((col) => (
-              <KanbanColumn key={col} status={col} jobs={byStatus[col]} pending={pending} onChange={onChange} />
+              <KanbanColumn
+                key={col}
+                status={col}
+                jobs={byStatus[col]}
+                pending={pending}
+                onDropJob={(jobId) => dropJob(jobId, col)}
+              />
             ))}
           </div>
         </div>
@@ -193,15 +214,31 @@ function KanbanColumn({
   status,
   jobs,
   pending,
-  onChange,
+  onDropJob,
 }: {
   status: JobStatus;
   jobs: Job[];
   pending: Set<string>;
-  onChange: ChangeStatus;
+  onDropJob: (jobId: string) => void;
 }) {
+  const [over, setOver] = useState(false);
   return (
-    <section className="kanban-col" aria-label={`${statusLabel(status)}, ${jobs.length}`}>
+    <section
+      className={`kanban-col${over ? " kanban-col--over" : ""}`}
+      aria-label={`${statusLabel(status)}, ${jobs.length}`}
+      onDragOver={(e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        setOver(true);
+      }}
+      onDragLeave={() => setOver(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setOver(false);
+        const jobId = e.dataTransfer.getData("text/plain");
+        if (jobId) onDropJob(jobId);
+      }}
+    >
       <div className="kanban-col-header">
         <span className={`status-chip status-chip--${status}`}>{statusLabel(status)}</span>
         <span className="kanban-count">{jobs.length}</span>
@@ -211,7 +248,7 @@ function KanbanColumn({
           <p className="kanban-empty">No jobs</p>
         ) : (
           jobs.map((job) => (
-            <JobCard key={job.job_id} job={job} busy={pending.has(job.job_id)} onChange={onChange} />
+            <JobCard key={job.job_id} job={job} busy={pending.has(job.job_id)} />
           ))
         )}
       </div>
@@ -243,17 +280,22 @@ function CardActions({ job, busy, onChange }: { job: Job; busy: boolean; onChang
   );
 }
 
-function JobCard({ job, busy, onChange }: { job: Job; busy: boolean; onChange: ChangeStatus }) {
+function JobCard({ job, busy }: { job: Job; busy: boolean }) {
   return (
-    <div className="job-card">
+    <div
+      className="job-card"
+      draggable={!busy}
+      data-job-id={job.job_id}
+      onDragStart={(e) => {
+        e.dataTransfer.setData("text/plain", job.job_id);
+        e.dataTransfer.effectAllowed = "move";
+      }}
+    >
       <a href={job.job_url} target="_blank" rel="noopener noreferrer" className="job-card-title">
         {job.title}
       </a>
       <p className="job-card-company">{job.company}</p>
       {job.location && <p className="job-card-location">{formatLocation(job)}</p>}
-      <div className="job-card-actions">
-        <CardActions job={job} busy={busy} onChange={onChange} />
-      </div>
     </div>
   );
 }

@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server";
 import { getActiveProfile, jobsCsvPath } from "@/lib/profile";
 import { readJobs, updateJob } from "@/lib/csv";
 import { isStatus } from "@/lib/status";
-import { appendStatusLog } from "@/lib/status-log";
+import { recordStatusChange } from "@/lib/status-log";
 
 const ISO_8601 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,9})?)?(Z|[+-]\d{2}:\d{2})$/;
 
@@ -74,7 +74,7 @@ export async function PATCH(
     return Response.json({ error: "Job not found" }, { status: 404 });
   }
 
-  await appendStatusLog(profile, {
+  await recordStatusChange(profile, {
     job_id: jobId,
     from: result.before.status ?? "",
     to: status,

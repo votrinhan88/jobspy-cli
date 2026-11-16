@@ -486,25 +486,6 @@ export default function ScrapePage() {
           </div>
         </div>
 
-        <FetchDescriptionOption
-          checked={config.fetch_linkedin_description}
-          onChange={(v) => updateConfig({ fetch_linkedin_description: v })}
-        />
-
-        <LinesInput
-          label="Exclude titles containing"
-          values={config.title_exclude}
-          onChange={(v) => updateConfig({ title_exclude: v })}
-          onFlush={flushConfig}
-          placeholder={"Senior\nManager\nDirector"}
-        />
-        <LinesInput
-          label="Exclude companies"
-          values={config.exclude_companies}
-          onChange={(v) => updateConfig({ exclude_companies: v })}
-          onFlush={flushConfig}
-          placeholder={"Acme Corp\nRecruitment Agency"}
-        />
         <div className="form-field form-field--full">
           <label className="form-label">ATS crawlers</label>
           <div className="checkbox-group">
@@ -526,6 +507,25 @@ export default function ScrapePage() {
           </div>
         </div>
 
+        <FetchDescriptionOption
+          checked={config.fetch_linkedin_description}
+          onChange={(v) => updateConfig({ fetch_linkedin_description: v })}
+        />
+
+        <LinesInput
+          label="Exclude titles containing"
+          values={config.title_exclude}
+          onChange={(v) => updateConfig({ title_exclude: v })}
+          onFlush={flushConfig}
+          placeholder={"Senior\nManager\nDirector"}
+        />
+        <LinesInput
+          label="Exclude companies"
+          values={config.exclude_companies}
+          onChange={(v) => updateConfig({ exclude_companies: v })}
+          onFlush={flushConfig}
+          placeholder={"Acme Corp\nRecruitment Agency"}
+        />
         <LinesInput
           label="Company boards"
           values={config.companies}

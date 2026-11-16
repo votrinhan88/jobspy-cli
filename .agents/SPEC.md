@@ -298,7 +298,7 @@ The Python engine writes both files next to `jobs.csv`.
 
 - Shows only rows where `status` is tracked (`isTrackedStatus`: not empty and not skipped). The header shows "{n} active applications, {m} rejected".
 - Views: Kanban, Table, Gantt. The toggle buttons use `aria-pressed`. The last view is kept in `localStorage` key `applications_view`.
-- Every card and table row has a status menu with all statuses plus "Back to untriaged". The current status is marked. Cards also have one primary button for the usual next step (Mark applied, Move to interview, Got offer). No confirmation dialogs. Each change shows the undo toast.
+- Kanban cards are dragged to another column to change status. The drop target highlights while a card is over it, the card stays in place until the PATCH returns, and the change shows the undo toast. Cards carry no buttons. A card is not draggable while its change is pending. Table rows keep the status menu with all statuses plus "Back to untriaged". No confirmation dialogs.
 - Gantt: one row per job (title and company at the left), week ticks on the time axis, bars in the status colours. Each bar has a `title` and an accessible name such as "Applied, 12 Sep to 18 Sep". Rows sort by most recent activity. The chart scrolls inside its own container. Data comes from `GET /api/jobs/log` and `GET /api/jobs`, built by `buildGanttRows` in `web/lib/gantt.ts`. A log entry with an earlier time than the entries before it (an undo) removes the undone segments. A job with no log gets one segment from its `status_updated_at`.
 
 ### Archived
@@ -315,10 +315,11 @@ The Python engine writes both files next to `jobs.csv`.
 
 **Function:** Show pipeline stats and a status-change timeline for the active profile.
 
-- Reads all rows in `jobs.csv` for the active profile via `GET /api/jobs`.
+- Reads all rows in `jobs.csv` for the active profile via `GET /api/jobs`. It also reads `GET /api/jobs/log`; a failed log read leaves the Flow card empty and does not fail the page.
 - Summary cards: total jobs, active (shortlisted + applied + interview + offer), remote (shared `isRemote`), archived (rejected + skipped).
 - Pipeline funnel: count per status with a color bar scaled to the largest status count.
 - Timeline: status-change activity grouped by week (Monday-based) from `status_updated_at`, for rows with a non-empty status, scaled to the busiest week.
+- Flow: a Sankey of status moves from `status_log.jsonl`. `buildSankey` in `web/lib/sankey.ts` keeps only forward moves in the rank order Untriaged, Shortlisted, Applied, Interview, Offer, Rejected; it drops backward moves, self moves and skipped. `layoutSankey` in `web/lib/sankey-layout.ts` gives each move a fixed pixel width (28 px max), so the chart height follows the counts instead of stretching to fill; nodes are centered and links are cubic curves. `web/components/sankey-chart.tsx` draws the SVG. Stage labels sit in a header row above the plot, and every flow prints its count on the curve; a flow that skips a column puts the count at 32% of the curve so it clears the bar it passes. The card notes that backward moves are not shown.
 - Breakdown: top companies and top locations by count.
 - Facets: top countries, top cities, work modes, seniority and employment types by count. Work mode, seniority and employment type use display labels.
 - Pure stats computation lives in `web/lib/statistics.ts` (`computeStatistics`) so it is testable without the UI.

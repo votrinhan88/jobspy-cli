@@ -150,7 +150,7 @@ describe("filterJobs", () => {
 
   it("status counts ignore the status filter but respect the query and the remote filter", () => {
     const counts = statusCounts(jobs, { query: "engineer", statuses: new Set<JobStatus>(["applied"]), remoteOnly: false });
-    expect(counts).toEqual({ all: 3, new: 0, "": 0, shortlisted: 1, applied: 1, interview: 0, offer: 0, rejected: 0, skipped: 1 });
+    expect(counts).toEqual({ all: 3, new: 0, "": 0, shortlisted: 1, applied: 1, interview: 0, offer: 0, accepted: 0, rejected: 0, skipped: 1 });
     const remote = statusCounts(jobs, { ...none, remoteOnly: true });
     expect(remote.all).toBe(2);
     expect(remote.skipped).toBe(1);
@@ -158,6 +158,12 @@ describe("filterJobs", () => {
 });
 
 describe("splitLocation", () => {
+  it("returns the region without the Vietnamese rank prefix", () => {
+    expect(splitLocation(j("1", { location: "Ấp Củ Chi, Việt Nam", region: "Thành phố Hồ Chí Minh" })).region).toBe(
+      "Hồ Chí Minh"
+    );
+  });
+
   it("takes the country from the last part, the city from the first part and the region from the region column", () => {
     expect(splitLocation(j("1", { location: "Sydney, Australia", region: "New South Wales" }))).toEqual({
       country: "Australia",
@@ -276,7 +282,16 @@ describe("formatLocation", () => {
     expect(formatLocation(j("1", { location: "Hà Nội, Việt Nam", region: "Thành phố Hà Nội" }))).toBe("Việt Nam, Hà Nội");
     expect(
       formatLocation(j("1", { location: "Ấp Củ Chi, Việt Nam", region: "Thành phố Hồ Chí Minh" }))
-    ).toBe("Việt Nam, Thành phố Hồ Chí Minh, Ấp Củ Chi");
+    ).toBe("Việt Nam, Hồ Chí Minh, Ấp Củ Chi");
+  });
+
+  it("drops the Vietnamese rank prefix from the region, as it does from the city", () => {
+    expect(formatLocation(j("1", { location: "Ấp Củ Chi, Việt Nam", region: "TP. Hồ Chí Minh" }))).toBe(
+      "Việt Nam, Hồ Chí Minh, Ấp Củ Chi"
+    );
+    expect(formatLocation(j("1", { location: "Đà Nẵng, Việt Nam", region: "Thành phố Đà Nẵng" }))).toBe(
+      "Việt Nam, Đà Nẵng"
+    );
   });
 
   it("keeps a region that only contains the country name", () => {

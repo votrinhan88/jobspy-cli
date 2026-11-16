@@ -5,13 +5,14 @@ const { STATUSES, statusLabel, isActiveStatus, isArchivedStatus, isSkippedStatus
 
 describe("status module", () => {
   it("lists statuses in pipeline order with sentence-case labels", () => {
-    expect(STATUSES).toEqual(["", "shortlisted", "applied", "interview", "offer", "rejected", "skipped"]);
+    expect(STATUSES).toEqual(["", "shortlisted", "applied", "interview", "offer", "accepted", "rejected", "skipped"]);
     expect(STATUSES.map(statusLabel)).toEqual([
       "Untriaged",
       "Shortlisted",
       "Applied",
       "Interview",
       "Offer",
+      "Accepted",
       "Rejected",
       "Skipped",
     ]);
@@ -29,8 +30,8 @@ describe("status module", () => {
     }
   });
 
-  it("isArchivedStatus is true for rejected and skipped only", () => {
-    expect(STATUSES.filter(isArchivedStatus)).toEqual(["rejected", "skipped"]);
+  it("isArchivedStatus is true for accepted, rejected and skipped only", () => {
+    expect(STATUSES.filter(isArchivedStatus)).toEqual(["accepted", "rejected", "skipped"]);
   });
 
   it("isSkippedStatus is true only for skipped", () => {
@@ -43,6 +44,7 @@ describe("status module", () => {
       "applied",
       "interview",
       "offer",
+      "accepted",
       "rejected",
     ]);
   });

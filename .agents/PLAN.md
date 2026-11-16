@@ -89,3 +89,24 @@ The web app is the active workstream. See `.agents/SPEC.md` for the full archite
 - ZipRecruiter returns 403 from this IP — geo-block, not a code issue
 - Concurrent scrape runs against the same profile are not supported
 - Job scoring deferred until semantic CV/JD matching is available
+
+---
+
+## Application Flow Sankey (2026-11-05)
+
+Goal: show how applications move between stages, from the status log, as a Sankey on the Statistics page.
+
+Decisions:
+
+- Forward-only links. Rank: Untriaged, Shortlisted, Applied, Interview, Offer, Rejected. A backward move is not drawn; a note says so.
+- Skipped is excluded. It is an archive action, not a stage.
+- `d3-sankey` for layout, rendered as an inline SVG like the Gantt.
+- The Statistics page fetches `/api/jobs/log` next to `/api/jobs`. A failed log fetch leaves the card with its empty state and does not fail the page.
+
+Steps, each its own commit:
+
+1. `web/lib/sankey.ts` - `buildSankey(entries)`: forward-only link counts, node list in rank order, skip unknown or self links. Tests first.
+2. Layout function with a capped pixel width per move, so the bands stay thin and the chart height follows the counts. Tests first.
+3. `web/components/sankey-chart.tsx` - SVG nodes, links and labels; empty state. Tests first.
+4. Wire the Flow section into the Statistics page. Tests first.
+5. Gate: `tsc`, `pnpm test`, `pnpm lint`, `pnpm build`; update SPEC, DESIGN-DECISIONS, HANDOFF. - Done 2026-11-05.
