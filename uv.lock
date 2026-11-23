@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = "==3.12.*"
 
 [[package]]
@@ -625,7 +625,7 @@ wheels = [
 
 [[package]]
 name = "python-jobspy"
-version = "1.4.1"
+version = "1.5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "beautifulsoup4" },
@@ -635,9 +635,9 @@ dependencies = [
     { name = "pydantic" },
     { name = "requests" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/c8/a6/ea349edcc556b992bb454f54345f19823f2ec41fac28c96d09dfbca06177/python_jobspy-1.4.1.tar.gz", hash = "sha256:602693102e4f60485ef681207386dd9eaf7a4a13914a566a9483cc2a421a98ef", size = 55182, upload-time = "2026-10-23T05:12:21.12Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/0e/56/f70766c889942ce09dc9c623e5f136128b3b05587fb14eea1f27fd41b8b0/python_jobspy-1.5.0.tar.gz", hash = "sha256:d02853f3f958d916ed9ffcb049557b209f5c09498732be6bf7adee8a9a4f2d4c", size = 60454, upload-time = "2026-11-20T18:31:14.691Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/99/3e/87d79b04f946da7c8d2ee84add5098cf88e6b32d373df6ff384ccff5cbf5/python_jobspy-1.4.1-py3-none-any.whl", hash = "sha256:8b5ace6c3d19612868d739673d4fcdb8f6f8b428984d44174668dc7ed0599cea", size = 68367, upload-time = "2026-10-23T05:12:19.962Z" },
+    { url = "https://files.pythonhosted.org/packages/17/cd/c7c1b8d208b43fbcc4ec9dc5bcc3f49dc251abd4bf686be1d2324f871adc/python_jobspy-1.5.0-py3-none-any.whl", hash = "sha256:83deebd0e50493cec0f2211b522a341a161b70db208e935806b2c6802f13d053", size = 74521, upload-time = "2026-11-20T18:31:13.483Z" },
 ]
 
 [[package]]
